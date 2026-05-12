@@ -19,14 +19,16 @@ counterpart to [`dexpace/java-sdk`](https://github.com/dexpace/java-sdk).
 - **Zero runtime dependencies** — standard library only
 - **Pluggable I/O** via `IoProvider` — contracts ship in `core`; a default in-memory
   adapter built on `bytearray` and `BinaryIO` ships out of the box (`DefaultIoProvider`)
-- **Immutable HTTP models** with fluent builders (`Request`, `Response`, `Headers`,
-  `MediaType`, `Protocol`)
-- **Pipeline architecture** for composable request/response processing
+- **Immutable HTTP models** — `Request`, `Response`, `Headers`, `MediaType`, `Protocol`
+  are frozen `dataclass`es; non-destructive mutation via `dataclasses.replace` and
+  `with_*` helpers
+- **Pipeline architecture** — `PipelineStep[T, V]` as a `Protocol`, composable into
+  request / response chains
 - **Context promotion chain** `DispatchContext` → `RequestContext` → `ExchangeContext`,
   each carrying an `InstrumentationContext` for tracing correlation
 - **Thread-safe registries** — `Io` and `ContextStore` are safe for concurrent use
-- **PEP 8 / type-annotated** — `from __future__ import annotations` everywhere,
-  `typing` only for static checkers
+- **`Protocol`-first SPI** — `HttpClient`, `Serde`, `Serializer`, `Deserializer` are
+  structural; any callable / object with the right shape qualifies
 
 ## Project Structure
 
@@ -36,12 +38,10 @@ python-sdk/
     dexpace/sdk/core/        Single package — all SDK core code
       io/                    I/O contracts + default adapter
       http/                  Request, Response, Headers, MediaType, Protocol, contexts
-      pipeline/              PipelineStep, traits
-      client/                HttpClient transport SPI
+      pipeline/              PipelineStep + step config
+      client/                HttpClient Protocol
       serde/                 Serde, Serializer, Deserializer
       instrumentation/       InstrumentationContext, Span, TracingScope (noops included)
-      generics.py            Builder protocol
-      util/                  Annotations and tiny helpers
   pyproject.toml
 ```
 
@@ -52,13 +52,12 @@ python-sdk/
 | [`io`](src/dexpace/sdk/core/io)                                             | `Source`, `Sink`, `BufferedSource`, `BufferedSink`, `Buffer`, `IoProvider`, `Io`, `TeeSink`, `DefaultIoProvider` |
 | [`http.request`](src/dexpace/sdk/core/http/request)                         | Immutable `Request`, `RequestBody`, `Method`                                  |
 | [`http.response`](src/dexpace/sdk/core/http/response)                       | Immutable `Response`, `ResponseBody`, `Status`                                |
-| [`http.common`](src/dexpace/sdk/core/http/common)                           | `Headers`, `MediaType`, `Protocol`, `CommonMediaTypes`                        |
+| [`http.common`](src/dexpace/sdk/core/http/common)                           | `Headers`, `MediaType`, `Protocol`, `common_media_types`                      |
 | [`http.context`](src/dexpace/sdk/core/http/context)                         | `CallContext`, `DispatchContext`, `RequestContext`, `ExchangeContext`, `ContextStore` |
-| [`pipeline`](src/dexpace/sdk/core/pipeline)                                 | `PipelineStep`, `RequestPipelineStep`, `ResponsePipelineStep`, step traits    |
+| [`pipeline`](src/dexpace/sdk/core/pipeline)                                 | `PipelineStep`, `RequestPipelineStep`, `ResponsePipelineStep`, `StepMetadata`, `RetryConfig` |
 | [`client`](src/dexpace/sdk/core/client)                                     | `HttpClient` Protocol                                                         |
-| [`serde`](src/dexpace/sdk/core/serde)                                       | `Serde`, `Serializer`, `Deserializer`                                         |
-| [`instrumentation`](src/dexpace/sdk/core/instrumentation)                   | `InstrumentationContext`, `Span`, `TracingScope`, noops                       |
-| [`generics`](src/dexpace/sdk/core/generics.py)                              | `Builder[T]` protocol                                                         |
+| [`serde`](src/dexpace/sdk/core/serde)                                       | `Serde`, `Serializer`, `Deserializer` Protocols                               |
+| [`instrumentation`](src/dexpace/sdk/core/instrumentation)                   | `InstrumentationContext`, `Span`, `Tracer`, `TracingScope`, noop singletons   |
 
 ## Quick Start
 
@@ -73,24 +72,39 @@ from dexpace.sdk.core.io.default import DefaultIoProvider
 Io.install_provider(DefaultIoProvider())
 ```
 
-### Making a request
+### Building a request
+
+Models are frozen dataclasses — construct directly and mutate via `with_*` helpers
+or `dataclasses.replace`:
 
 ```python
+from dexpace.sdk.core.http.common import Headers, common_media_types
 from dexpace.sdk.core.http.request import Method, Request, RequestBody
-from dexpace.sdk.core.http.common import CommonMediaTypes
 
-request = (
-    Request.builder()
-        .url("https://api.example.com/v1/resource")
-        .method(Method.POST)
-        .add_header("Content-Type", "application/json")
-        .body(RequestBody.from_string('{"key": "value"}', CommonMediaTypes.APPLICATION_JSON))
-        .build()
+request = Request(
+    method=Method.POST,
+    url="https://api.example.com/v1/resource",
+    headers=Headers({"Content-Type": "application/json"}),
+    body=RequestBody.from_string(
+        '{"key": "value"}',
+        media_type=common_media_types.APPLICATION_JSON,
+    ),
 )
 
+# Non-destructive updates return a new Request:
+retried = request.with_added_header("X-Retry-Count", "1")
+```
+
+### Consuming a response
+
+`Response` and `ResponseBody` are context managers — use `with` to release the
+transport handle deterministically:
+
+```python
 with http_client.execute(request) as response:
-    if response.status.is_success:
-        body = response.body.bytes()  # consumes the body
+    if response.is_success:
+        text = response.body.string()         # decodes per media-type charset
+        # … or `.bytes()` for raw bytes, or `.source()` for streaming reads
 ```
 
 ### Using the I/O layer
@@ -100,7 +114,23 @@ from dexpace.sdk.core.io import Io
 
 buffer = Io.provider.buffer()
 buffer.write_utf8("Hello, world!")
-text = buffer.read_utf8()           # "Hello, world!"
+text = buffer.read_utf8()            # "Hello, world!"
+```
+
+### Writing a pipeline step
+
+`PipelineStep[T_in, T_out]` is a `Protocol` — any callable with the matching shape
+qualifies, including plain functions and lambdas:
+
+```python
+from dexpace.sdk.core.http.context import DispatchContext
+from dexpace.sdk.core.http.request import Request
+from dexpace.sdk.core.pipeline import PipelineStep
+
+def add_user_agent(request: Request, context: DispatchContext) -> Request:
+    return request.with_header("User-Agent", "my-app/1.0")
+
+step: PipelineStep[Request, Request] = add_user_agent
 ```
 
 ## Architecture
@@ -112,33 +142,36 @@ models, and pipelines; consuming libraries plug in a concrete transport via the
 Layered, bottom-up:
 
 1. **`io/` contracts** — `Source` / `Sink` (primitive byte channels), `BufferedSource` /
-   `BufferedSink` (typed reads/writes: byte strings, UTF-8 strings, lines, peek, BinaryIO
-   bridges), `Buffer` (both source and sink + `snapshot()` for body logging). All
-   interfaces; `core` ships exactly one default implementation (`DefaultIoProvider`)
-   built on `bytearray` and `BinaryIO`. `IoProvider` is the single factory seam;
-   `Io.install_provider(provider)` wires it once at startup and `Io.provider` resolves
-   it everywhere.
-2. **`http.request` / `http.response` / `http.common`** — immutable models built with
-   private constructors + `Builder` + `new_builder()`. `RequestBody` exposes
-   `is_replayable()` and `to_replayable(provider)`; factories cover bytes, strings,
-   in-memory `Buffer`s, `BufferedSource`s, and form-encoded payloads.
-3. **`http.context`** — context promotion chain: `DispatchContext` → `RequestContext`
-   → `ExchangeContext`, all carrying an `InstrumentationContext` for tracing
+   `BufferedSink` (typed reads/writes: byte strings, UTF-8 strings, lines, peek,
+   `BinaryIO` bridges), `Buffer` (both source and sink + `snapshot()` for body
+   logging). `IoProvider` is the single factory seam; `Io.install_provider(provider)`
+   wires it once at startup. `DefaultIoProvider` ships a working in-memory implementation.
+2. **`http.request` / `http.response` / `http.common`** — immutable frozen-dataclass
+   models. Non-destructive mutation via `dataclasses.replace` or the `with_*` helpers.
+   `RequestBody` exposes `is_replayable()` and `to_replayable(provider)`; classmethod
+   factories (`from_bytes`, `from_string`, `from_form`, `from_buffer`, `from_source`)
+   cover the common shapes.
+3. **`http.context`** — promotion chain `DispatchContext` → `RequestContext` →
+   `ExchangeContext`, all carrying an `InstrumentationContext` for tracing
    correlation, registered in the thread-safe `ContextStore` by trace id.
-4. **`pipeline/`** — composable request/response processing. `PipelineStep[T, V]` is
-   the building block; `RequestPipelineStep` / `ResponsePipelineStep` are typed aliases
-   for the request/response sides.
+4. **`pipeline/`** — `PipelineStep[T_in, T_out]` Protocol is the building block;
+   `RetryableStep` adds a retry hook. `StepMetadata` and `RetryConfig` provide
+   optional configuration objects.
 5. **`client/HttpClient`** — single-method Protocol (`execute(request) -> Response`).
    Transport is **not** provided by `core`.
 
 ## Conventions
 
-- **Python 3.8 compatible.** No `match`, no `X | Y` annotations in runtime contexts,
-  no `Self`, no `TypeAlias`. `from __future__ import annotations` everywhere.
-- **Immutable data + builder.** Models use `@dataclass(frozen=True)` and expose a
-  matching `Builder` class implementing `Builder[T]`.
-- **Thread-safety where it matters.** `Io` and `ContextStore` are safe under
-  concurrent calls; individual buffers / sources / sinks are not.
+- **Python 3.8 compatible.** No `match`, no `|` runtime unions, no `Self`, no
+  `TypeAlias`. `from __future__ import annotations` everywhere.
+- **Immutable data, no builders.** Models are `@dataclass(frozen=True)`; mutate via
+  `dataclasses.replace` or the `with_*` helpers. Builders are a Java idiom — Python's
+  keyword/default arguments make them redundant.
+- **Thread-safety where stated.** `Io` and `ContextStore` are safe under concurrent
+  calls; individual buffers / sources / sinks are not.
+- **`Protocol` for SPIs, `ABC` for shared behaviour.** `HttpClient`, `Serde`, and
+  `PipelineStep` are structural Protocols. `Source`, `Sink`, `Buffer`, `Span` are
+  ABCs because they ship default methods (e.g. context-manager support).
 - **No runtime dependencies.** Add nothing to `pyproject.toml` beyond stdlib.
 
 ## Tech Stack
