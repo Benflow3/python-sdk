@@ -1,0 +1,208 @@
+"""Async reference ``HttpClient`` built on ``asyncio.open_connection``.
+
+A minimal HTTP/1.1 client that uses raw sockets (no third-party deps).
+Intended for tests, examples, and demonstrating the async pipeline shape;
+production-quality async transports should come from adapters built on
+``httpx`` / ``aiohttp``.
+
+The implementation handles only:
+
+- HTTP/1.1
+- Plain TCP (``http://``); TLS (``https://``) via ``ssl.create_default_context``
+- ``Content-Length``-framed responses (no chunked transfer-encoding)
+- Connection: close (one request per connection)
+
+These limits keep the reference implementation small enough to verify by
+inspection. For anything else, plug in a proper adapter.
+"""
+from __future__ import annotations
+
+import asyncio
+import contextlib
+import ssl as _ssl
+from types import TracebackType
+from typing import Final, Self
+from urllib.parse import urlsplit
+
+from ..errors import (
+    ServiceRequestError,
+    ServiceRequestTimeoutError,
+    ServiceResponseError,
+)
+from ..http.common.headers import Headers
+from ..http.common.protocol import Protocol
+from ..http.request.request import Request
+from ..http.response.async_response import AsyncResponse
+from ..http.response.async_response_body import AsyncResponseBody
+from ..http.response.status import Status
+
+_DEFAULT_TIMEOUT: Final[float] = 30.0
+_CRLF: Final[bytes] = b"\r\n"
+
+
+class AsyncioHttpClient:
+    """Reference async HTTP/1.1 client.
+
+    Attributes:
+        timeout: Connect/read timeout in seconds.
+        ssl_context: Optional pre-built ``SSLContext`` for ``https://``.
+            Defaults to ``ssl.create_default_context()`` on first use.
+    """
+
+    __slots__ = ("_closed", "_ssl_context", "timeout")
+
+    def __init__(
+        self,
+        *,
+        timeout: float = _DEFAULT_TIMEOUT,
+        ssl_context: _ssl.SSLContext | None = None,
+    ) -> None:
+        if timeout <= 0:
+            raise ValueError(f"timeout must be positive, got {timeout}")
+        self.timeout = timeout
+        self._ssl_context = ssl_context
+        self._closed = False
+
+    async def execute(self, request: Request) -> AsyncResponse:
+        if self._closed:
+            raise ServiceRequestError("AsyncioHttpClient is closed")
+        host, port, secure, path = _split_url(request.url)
+        reader, writer = await self._open(host, port, secure)
+        try:
+            await self._send(writer, request, host, path)
+            return await self._read(reader, request)
+        finally:
+            writer.close()
+            with contextlib.suppress(ConnectionError, OSError):
+                await writer.wait_closed()
+
+    async def aclose(self) -> None:
+        self._closed = True
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        await self.aclose()
+
+    async def _open(
+        self,
+        host: str,
+        port: int,
+        secure: bool,
+    ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+        ssl_ctx = self._ssl_context or (_ssl.create_default_context() if secure else None)
+        try:
+            return await asyncio.wait_for(
+                asyncio.open_connection(host, port, ssl=ssl_ctx),
+                timeout=self.timeout,
+            )
+        except TimeoutError as err:
+            raise ServiceRequestTimeoutError(
+                f"Connect to {host}:{port} timed out", error=err
+            ) from err
+        except OSError as err:
+            raise ServiceRequestError(
+                f"Connect to {host}:{port} failed: {err}", error=err
+            ) from err
+
+    async def _send(
+        self,
+        writer: asyncio.StreamWriter,
+        request: Request,
+        host: str,
+        path: str,
+    ) -> None:
+        body_bytes = b""
+        if request.body is not None:
+            body_bytes = b"".join(request.body.iter_bytes())
+        headers = Headers(request.headers.items()).with_set("Host", host)
+        if "content-length" not in headers and body_bytes:
+            headers = headers.with_set("Content-Length", str(len(body_bytes)))
+        headers = headers.with_set("Connection", "close")
+        request_line = f"{request.method} {path or '/'} HTTP/1.1".encode()
+        lines: list[bytes] = [request_line]
+        for name, values in headers.items():
+            for value in values:
+                lines.append(f"{name}: {value}".encode("latin-1"))
+        lines.extend((b"", body_bytes))
+        writer.write(_CRLF.join(lines))
+        await writer.drain()
+
+    async def _read(
+        self,
+        reader: asyncio.StreamReader,
+        request: Request,
+    ) -> AsyncResponse:
+        status_line = await asyncio.wait_for(reader.readline(), timeout=self.timeout)
+        if not status_line:
+            raise ServiceResponseError("Empty response from server")
+        parts = status_line.decode("latin-1").rstrip("\r\n").split(" ", 2)
+        if len(parts) < 2 or not parts[1].isdigit():
+            raise ServiceResponseError(f"Malformed status line: {status_line!r}")
+        try:
+            status = Status(int(parts[1]))
+        except ValueError as err:
+            raise ServiceResponseError(f"Unknown status code: {parts[1]}", error=err) from err
+        reason = parts[2] if len(parts) > 2 else None
+        headers = await self._read_headers(reader)
+        content_length = _content_length(headers)
+        body_bytes = await asyncio.wait_for(
+            reader.readexactly(content_length) if content_length > 0 else _empty(),
+            timeout=self.timeout,
+        )
+        return AsyncResponse(
+            request=request,
+            protocol=Protocol.HTTP_1_1,
+            status=status,
+            headers=headers,
+            message=reason,
+            body=AsyncResponseBody.from_bytes(body_bytes),
+        )
+
+    async def _read_headers(self, reader: asyncio.StreamReader) -> Headers:
+        entries: list[tuple[str, str]] = []
+        while True:
+            line = await asyncio.wait_for(reader.readline(), timeout=self.timeout)
+            if not line or line in (b"\r\n", b"\n"):
+                break
+            text = line.decode("latin-1").rstrip("\r\n")
+            if ":" not in text:
+                raise ServiceResponseError(f"Malformed header: {text!r}")
+            name, _, value = text.partition(":")
+            entries.append((name.strip(), value.strip()))
+        return Headers(entries)
+
+
+def _split_url(url: str) -> tuple[str, int, bool, str]:
+    parsed = urlsplit(url)
+    if not parsed.hostname:
+        raise ServiceRequestError(f"URL missing host: {url!r}")
+    secure = parsed.scheme == "https"
+    port = parsed.port or (443 if secure else 80)
+    path = parsed.path or "/"
+    if parsed.query:
+        path = f"{path}?{parsed.query}"
+    return parsed.hostname, port, secure, path
+
+
+def _content_length(headers: Headers) -> int:
+    raw = headers.get("Content-Length")
+    if raw is None:
+        return 0
+    try:
+        return max(0, int(raw))
+    except ValueError as err:
+        raise ServiceResponseError(f"Invalid Content-Length: {raw!r}", error=err) from err
+
+
+async def _empty() -> bytes:
+    return b""
+
+
+__all__ = ["AsyncioHttpClient"]

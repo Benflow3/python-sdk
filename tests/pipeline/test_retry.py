@@ -1,0 +1,253 @@
+"""Tests for ``RetryPolicy`` behaviour."""
+from __future__ import annotations
+
+import time
+from collections.abc import Sequence
+
+import pytest
+
+from dexpace.sdk.core.client.http_client import HttpClient
+from dexpace.sdk.core.errors import (
+    ClientAuthenticationError,
+    ServiceRequestError,
+    ServiceResponseError,
+)
+from dexpace.sdk.core.http.common import Protocol
+from dexpace.sdk.core.http.context import DispatchContext
+from dexpace.sdk.core.http.request import Method, Request
+from dexpace.sdk.core.http.response import Response, Status
+from dexpace.sdk.core.instrumentation import (
+    InstrumentationContext,
+    SpanId,
+    TraceFlags,
+    TraceId,
+    TraceIdType,
+    TraceState,
+)
+from dexpace.sdk.core.instrumentation.noop import NOOP_SPAN
+from dexpace.sdk.core.pipeline import Pipeline
+from dexpace.sdk.core.pipeline.policies import RetryPolicy
+from dexpace.sdk.core.pipeline.policies.retry import _parse_retry_after
+
+
+def _instr(trace: str) -> InstrumentationContext:
+    return InstrumentationContext(
+        trace_id_type=TraceIdType.W3C,
+        trace_id=TraceId(trace),
+        span_id=SpanId("0" * 16),
+        span=NOOP_SPAN,
+        trace_flags=TraceFlags.NOOP,
+        trace_state=TraceState.NOOP,
+    )
+
+
+def _get() -> Request:
+    return Request(method=Method.GET, url="https://example.com/")
+
+
+def _post() -> Request:
+    return Request(method=Method.POST, url="https://example.com/")
+
+
+class _ScriptedClient(HttpClient):
+    """Returns one response or raises one error per call, in order."""
+
+    def __init__(
+        self,
+        outcomes: Sequence[Status | BaseException],
+        retry_after: str | None = None,
+    ) -> None:
+        self._outcomes = list(outcomes)
+        self.retry_after = retry_after
+        self.attempts = 0
+
+    def execute(self, request: Request) -> Response:
+        outcome = self._outcomes[self.attempts]
+        self.attempts += 1
+        if isinstance(outcome, BaseException):
+            raise outcome
+        response = Response(request=request, protocol=Protocol.HTTP_1_1, status=outcome)
+        if self.retry_after is not None and not outcome.is_success:
+            response = response.with_header("Retry-After", self.retry_after)
+        return response
+
+
+def _no_sleep(_duration: float) -> None:
+    return None
+
+
+class TestRetryOnStatus:
+    def test_retries_503_on_get(self) -> None:
+        client = _ScriptedClient([Status.SERVICE_UNAVAILABLE, Status.OK])
+        retry = RetryPolicy(sleep=_no_sleep)
+        with Pipeline(client, policies=[retry]) as p:
+            response = p.run(_get(), DispatchContext(_instr("0" * 16 + "1")))
+        assert response.status is Status.OK
+        assert client.attempts == 2
+
+    def test_does_not_retry_404(self) -> None:
+        client = _ScriptedClient([Status.NOT_FOUND])
+        retry = RetryPolicy(sleep=_no_sleep)
+        with Pipeline(client, policies=[retry]) as p:
+            response = p.run(_get(), DispatchContext(_instr("0" * 16 + "2")))
+        assert response.status is Status.NOT_FOUND
+        assert client.attempts == 1
+
+    def test_post_retried_only_on_500_503_504(self) -> None:
+        client = _ScriptedClient([Status.BAD_REQUEST])
+        retry = RetryPolicy(sleep=_no_sleep)
+        with Pipeline(client, policies=[retry]) as p:
+            response = p.run(_post(), DispatchContext(_instr("0" * 16 + "3")))
+        assert client.attempts == 1
+        assert response.status is Status.BAD_REQUEST
+
+    def test_post_retried_on_503(self) -> None:
+        client = _ScriptedClient([Status.SERVICE_UNAVAILABLE, Status.OK])
+        retry = RetryPolicy(sleep=_no_sleep)
+        with Pipeline(client, policies=[retry]) as p:
+            response = p.run(_post(), DispatchContext(_instr("0" * 16 + "4")))
+        assert client.attempts == 2
+        assert response.is_success
+
+    def test_status_retry_budget_exhausted(self) -> None:
+        client = _ScriptedClient([Status.SERVICE_UNAVAILABLE] * 5)
+        retry = RetryPolicy(status_retries=2, sleep=_no_sleep)
+        with Pipeline(client, policies=[retry]) as p:
+            response = p.run(_get(), DispatchContext(_instr("0" * 16 + "5")))
+        # 1 initial + 2 retries = 3 attempts before giving up.
+        assert client.attempts == 3
+        assert response.status is Status.SERVICE_UNAVAILABLE
+
+
+class TestRetryOnError:
+    def test_retries_connect_error(self) -> None:
+        client = _ScriptedClient(
+            [ServiceRequestError("dns fail"), Status.OK],
+        )
+        retry = RetryPolicy(sleep=_no_sleep)
+        with Pipeline(client, policies=[retry]) as p:
+            response = p.run(_get(), DispatchContext(_instr("0" * 16 + "6")))
+        assert response.is_success
+        assert client.attempts == 2
+
+    def test_retries_response_error(self) -> None:
+        client = _ScriptedClient(
+            [ServiceResponseError("connection reset"), Status.OK],
+        )
+        retry = RetryPolicy(sleep=_no_sleep)
+        with Pipeline(client, policies=[retry]) as p:
+            response = p.run(_get(), DispatchContext(_instr("0" * 16 + "7")))
+        assert response.is_success
+        assert client.attempts == 2
+
+    def test_short_circuits_client_authentication_error(self) -> None:
+        from dexpace.sdk.core.errors import HttpResponseError
+
+        client = _ScriptedClient(
+            [ClientAuthenticationError(response=None), Status.OK],
+        )
+        retry = RetryPolicy(sleep=_no_sleep)
+        with Pipeline(client, policies=[retry]) as p, pytest.raises(HttpResponseError):
+            p.run(_get(), DispatchContext(_instr("0" * 16 + "8")))
+        # Only one attempt — auth failures are not retried.
+        assert client.attempts == 1
+
+    def test_connect_retry_budget_exhausted(self) -> None:
+        client = _ScriptedClient(
+            [ServiceRequestError("fail")] * 5,
+        )
+        retry = RetryPolicy(connect_retries=2, sleep=_no_sleep)
+        with Pipeline(client, policies=[retry]) as p, pytest.raises(ServiceRequestError):
+            p.run(_get(), DispatchContext(_instr("0" * 16 + "9")))
+        assert client.attempts == 3
+
+
+class TestRetryAfterHeader:
+    def test_parse_delta_seconds(self) -> None:
+        assert _parse_retry_after("5") == pytest.approx(5.0)
+        assert _parse_retry_after("0") == pytest.approx(0.0)
+        assert _parse_retry_after("0.5") == pytest.approx(0.5)
+
+    def test_parse_http_date_future(self) -> None:
+        # Far-future date should be a positive delta.
+        result = _parse_retry_after("Sun, 06 Nov 2099 08:49:37 GMT")
+        assert result is not None
+        assert result > 0
+
+    def test_parse_http_date_past_clamps_to_zero(self) -> None:
+        result = _parse_retry_after("Mon, 01 Jan 1990 00:00:00 GMT")
+        assert result == pytest.approx(0.0)
+
+    def test_parse_invalid_returns_none(self) -> None:
+        assert _parse_retry_after("not-a-date") is None
+        assert _parse_retry_after("") is None
+        assert _parse_retry_after(None) is None
+
+    def test_respected_during_retry(self) -> None:
+        sleeps: list[float] = []
+
+        def record(d: float) -> None:
+            sleeps.append(d)
+
+        client = _ScriptedClient(
+            [Status.SERVICE_UNAVAILABLE, Status.OK],
+            retry_after="2",
+        )
+        retry = RetryPolicy(sleep=record)
+        with Pipeline(client, policies=[retry]) as p:
+            p.run(_get(), DispatchContext(_instr("0" * 16 + "a")))
+        assert sleeps and sleeps[0] == pytest.approx(2.0)
+
+
+class TestRetryHistory:
+    def test_history_recorded_in_ctx_data(self) -> None:
+        from dexpace.sdk.core.pipeline import PipelineContext, Policy
+
+        captured: dict[str, object] = {}
+
+        class _Probe(Policy):
+            def send(self, request: Request, ctx: PipelineContext) -> Response:
+                response = self.next.send(request, ctx)
+                captured["history"] = ctx.data.get("retry_history")
+                return response
+
+        client = _ScriptedClient([Status.SERVICE_UNAVAILABLE, Status.OK])
+        with Pipeline(client, policies=[_Probe(), RetryPolicy(sleep=_no_sleep)]) as p:
+            p.run(_get(), DispatchContext(_instr("0" * 16 + "b")))
+        history = captured["history"]
+        assert history is not None and len(history) == 1  # type: ignore[arg-type]
+
+
+class TestRetryNoRetries:
+    def test_no_retries_factory(self) -> None:
+        retry = RetryPolicy.no_retries()
+        assert retry.total_retries == 0
+
+    def test_no_retries_lets_first_failure_through(self) -> None:
+        client = _ScriptedClient([Status.SERVICE_UNAVAILABLE])
+        retry = RetryPolicy.no_retries()
+        retry._sleep = _no_sleep
+        with Pipeline(client, policies=[retry]) as p:
+            response = p.run(_get(), DispatchContext(_instr("0" * 16 + "c")))
+        assert client.attempts == 1
+        assert response.status is Status.SERVICE_UNAVAILABLE
+
+
+class TestRetryTimeout:
+    def test_per_call_override_via_options(self) -> None:
+        client = _ScriptedClient([Status.SERVICE_UNAVAILABLE] * 5)
+        retry = RetryPolicy(sleep=_no_sleep)
+        with Pipeline(client, policies=[retry]) as p:
+            response = p.run(
+                _get(),
+                DispatchContext(_instr("0" * 16 + "d")),
+                retry_status=1,
+            )
+        # 1 initial + 1 retry = 2 attempts.
+        assert client.attempts == 2
+        assert response.status is Status.SERVICE_UNAVAILABLE
+
+
+# Sanity: time.monotonic available for the budget arithmetic used internally.
+def test_monotonic_clock_available() -> None:
+    assert time.monotonic() > 0

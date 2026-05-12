@@ -1,0 +1,171 @@
+"""Generic pager iterators (sync + async).
+
+Modelled on Azure's ``corehttp.paging``: caller supplies two callables —
+``get_next(continuation_token)`` to fetch a page and ``extract_data(page)``
+to extract the next token plus the items in that page. The iterator yields
+items or pages depending on which iterator surface the consumer uses.
+"""
+from __future__ import annotations
+
+from collections.abc import (
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Iterable,
+    Iterator,
+)
+from typing import Any
+
+from ...errors import SdkError
+
+
+class Pager[T, R](Iterator[Iterator[T]]):
+    """Sync iterator of pages.
+
+    Each ``__next__`` call returns an ``Iterator[T]`` over the items in
+    the page that ``get_next`` produced. Iteration terminates when
+    ``extract_data`` returns a ``None`` continuation token after producing
+    at least one page.
+
+    On any ``SdkError`` raised by ``get_next``, the current
+    ``continuation_token`` is stamped onto the error so callers can resume.
+    """
+
+    __slots__ = ("_did_first_call", "_extract_data", "_get_next", "continuation_token")
+
+    def __init__(
+        self,
+        get_next: Callable[[str | None], R],
+        extract_data: Callable[[R], tuple[str | None, Iterable[T]]],
+        continuation_token: str | None = None,
+    ) -> None:
+        self._get_next = get_next
+        self._extract_data = extract_data
+        self.continuation_token = continuation_token
+        self._did_first_call = False
+
+    def __iter__(self) -> Iterator[Iterator[T]]:
+        return self
+
+    def __next__(self) -> Iterator[T]:
+        if self.continuation_token is None and self._did_first_call:
+            raise StopIteration
+        try:
+            response = self._get_next(self.continuation_token)
+        except SdkError as err:
+            if err.continuation_token is None:
+                err.continuation_token = self.continuation_token
+            raise
+        self._did_first_call = True
+        self.continuation_token, items = self._extract_data(response)
+        return iter(items)
+
+
+class ItemPaged[T](Iterator[T]):
+    """Flat iterator over the items of a paged response.
+
+    Wraps a :class:`Pager` and yields individual items rather than pages.
+    Use :meth:`by_page` when page-level iteration is required.
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        self._args = args
+        self._kwargs = kwargs
+        self._flat: Iterator[T] | None = None
+
+    def by_page(self, continuation_token: str | None = None) -> Iterator[Iterator[T]]:
+        kwargs = {**self._kwargs, "continuation_token": continuation_token}
+        return Pager(*self._args, **kwargs)
+
+    def __iter__(self) -> Iterator[T]:
+        return self
+
+    def __next__(self) -> T:
+        if self._flat is None:
+            import itertools as _it
+
+            self._flat = _it.chain.from_iterable(self.by_page())
+        return next(self._flat)
+
+
+class AsyncPager[T, R](AsyncIterator[AsyncIterator[T]]):
+    """Async iterator of pages."""
+
+    __slots__ = ("_did_first_call", "_extract_data", "_get_next", "continuation_token")
+
+    def __init__(
+        self,
+        get_next: Callable[[str | None], Awaitable[R]],
+        extract_data: Callable[[R], Awaitable[tuple[str | None, Iterable[T]]]],
+        continuation_token: str | None = None,
+    ) -> None:
+        self._get_next = get_next
+        self._extract_data = extract_data
+        self.continuation_token = continuation_token
+        self._did_first_call = False
+
+    def __aiter__(self) -> AsyncIterator[AsyncIterator[T]]:
+        return self
+
+    async def __anext__(self) -> AsyncIterator[T]:
+        if self.continuation_token is None and self._did_first_call:
+            raise StopAsyncIteration
+        try:
+            response = await self._get_next(self.continuation_token)
+        except SdkError as err:
+            if err.continuation_token is None:
+                err.continuation_token = self.continuation_token
+            raise
+        self._did_first_call = True
+        token, items = await self._extract_data(response)
+        self.continuation_token = token
+        return _SyncToAsync(iter(items))
+
+
+class AsyncItemPaged[T](AsyncIterator[T]):
+    """Flat async iterator over items of a paged response."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        self._args = args
+        self._kwargs = kwargs
+        self._pages: AsyncIterator[AsyncIterator[T]] | None = None
+        self._current: AsyncIterator[T] | None = None
+
+    def by_page(
+        self,
+        continuation_token: str | None = None,
+    ) -> AsyncIterator[AsyncIterator[T]]:
+        kwargs = {**self._kwargs, "continuation_token": continuation_token}
+        return AsyncPager(*self._args, **kwargs)
+
+    def __aiter__(self) -> AsyncIterator[T]:
+        return self
+
+    async def __anext__(self) -> T:
+        if self._pages is None:
+            self._pages = self.by_page()
+        while True:
+            if self._current is None:
+                self._current = await self._pages.__anext__()
+            try:
+                return await self._current.__anext__()
+            except StopAsyncIteration:
+                self._current = None
+
+
+class _SyncToAsync[T](AsyncIterator[T]):
+    """Wrap a sync iterator as an async iterator."""
+
+    __slots__ = ("_inner",)
+
+    def __init__(self, inner: Iterator[T]) -> None:
+        self._inner = inner
+
+    async def __anext__(self) -> T:
+        try:
+            return next(self._inner)
+        except StopIteration as err:
+            raise StopAsyncIteration from err
+
+
+__all__ = ["AsyncItemPaged", "AsyncPager", "ItemPaged", "Pager"]

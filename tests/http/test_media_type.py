@@ -42,7 +42,10 @@ class TestNormalisation:
 
     def test_parameter_keys_normalised(self) -> None:
         mt = MediaType.of("text", "plain", {"CHARSET": "UTF-8"})
-        assert mt.charset == "utf-8"
+        # Keys are case-folded; values preserve case (multipart boundaries
+        # and similar parameters depend on case).
+        assert dict(mt.parameters) == {"charset": "UTF-8"}
+        assert mt.charset == "UTF-8"
 
     def test_blank_type_raises(self) -> None:
         with pytest.raises(ValueError):

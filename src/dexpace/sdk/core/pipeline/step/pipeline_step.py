@@ -1,49 +1,49 @@
-""":class:`PipelineStep` and shape-specialised aliases."""
+"""``PipelineStep`` Protocol and shape-specialised aliases.
+
+A ``PipelineStep`` is a SansIO transform: stateless, transport-agnostic,
+``(value, ctx) -> value``. The pipeline runner wraps these in internal
+``_SansIO*Runner`` policies so they participate in the linked-list chain
+without each step needing to know about ``.next``.
+
+For steps that need to wrap the downstream chain (retry, auth challenges,
+span lifecycles), implement ``pipeline.Policy`` directly instead.
+"""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from ...http.context import DispatchContext, ExchangeContext
+    from ...http.context import CallContext
     from ...http.request import Request
     from ...http.response import Response
 
 
 @runtime_checkable
 class PipelineStep[T_in, T_out](Protocol):
-    """A single executable step in a pipeline workflow.
+    """A single executable SansIO step in a pipeline workflow.
 
     Steps compose into chains: each takes the upstream's output plus the
-    per-call :class:`DispatchContext` and emits the next stage's input.
+    current promotion-chain ``CallContext`` (``DispatchContext``,
+    ``RequestContext``, or ``ExchangeContext`` depending on tier) and emits
+    the next stage's input. Returning ``None`` short-circuits the chain
+    (the pipeline raises ``PipelineAbortedError``).
 
-    Implementations can be classes, lambdas, or any callable with a matching
-    signature — the Protocol is structural.
+    Implementations can be classes, lambdas, or any callable with a
+    matching signature — the Protocol is structural. Tag a step with a
+    ``side`` attribute (``"request"`` or ``"response"``) to tell the
+    pipeline runner whether to wrap it pre- or post-transport; untagged
+    callables default to the request side.
     """
 
-    def __call__(self, value: T_in, context: DispatchContext) -> T_out: ...
+    def __call__(self, value: T_in, context: CallContext) -> T_out: ...
 
 
-@runtime_checkable
-class RetryableStep[T_in, T_out](Protocol):
-    """:class:`PipelineStep` that exposes a retry hook.
-
-    The retry entry receives the richer :class:`ExchangeContext` (post-dispatch,
-    with the in-flight exchange's mutable state), so it can read attempt count,
-    last failure, and timing without re-threading state through the primary
-    call path.
-    """
-
-    def __call__(self, value: T_in, context: DispatchContext) -> T_out: ...
-
-    def retry(self, context: ExchangeContext) -> T_out: ...
-
-
-# Shape-specialised aliases. These are documentation conveniences — prefer
-# annotating with the parametrised form ``PipelineStep[Request, Request]`` when
-# you need to pin both input and output types.
+# Shape-specialised aliases. Prefer the parametrised form
+# ``PipelineStep[Request, Request]`` when you need to pin both input and
+# output types — these aliases exist for documentation only.
 if TYPE_CHECKING:
-    type RequestPipelineStep = PipelineStep[Request, Request]
-    type ResponsePipelineStep = PipelineStep[Response, Response]
+    type RequestPipelineStep = PipelineStep[Request, Request | None]
+    type ResponsePipelineStep = PipelineStep[Response, Response | None]
 else:
     RequestPipelineStep = PipelineStep
     ResponsePipelineStep = PipelineStep
@@ -53,5 +53,4 @@ __all__ = [
     "PipelineStep",
     "RequestPipelineStep",
     "ResponsePipelineStep",
-    "RetryableStep",
 ]

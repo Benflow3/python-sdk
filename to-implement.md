@@ -125,12 +125,12 @@ migration and the `io/` rip-out.
 
 ---
 
-## M2 — Composition, errors, retry, serde
+## M2 — Composition, errors, retry, serde ✅
 
-The `PipelineStep` Protocol exists but there is no engine yet that runs a
-chain. This milestone adds the pipeline engine, the error hierarchy that
-retry depends on, the retry policy itself, a default JSON `Serde`, and the
-two stateless utility policies (logger, URL redactor).
+Pipeline engine, error hierarchy, retry policy, JSON serde, and the
+stateless logging / URL-redaction helpers all landed. See
+`pipeline/`, `errors/`, `serde/json_serde.py`,
+`instrumentation/client_logger.py`, `instrumentation/url_redactor.py`.
 
 ### Errors — *do this first; retry depends on it*
 
@@ -265,12 +265,16 @@ short-circuits; tests cover the error hierarchy.
 
 ---
 
-## M3 — Reference transport & async stack
+## M3 — Reference transport & async stack ✅
 
-The contracts are transport-agnostic — until something implements `HttpClient`,
-nothing actually talks HTTP. This milestone ships a no-deps sync transport, the
-full async hierarchy, and an async transport so the public API is usable from
-both worlds.
+Sync `UrllibHttpClient` + full async hierarchy
+(`AsyncHttpClient`, `AsyncPipeline`, `AsyncPolicy`, `AsyncRequestBody`,
+`AsyncResponseBody`, `AsyncResponse`, `AsyncRetryPolicy`,
+`AsyncioHttpClient`) all landed. See `client/`, `pipeline/`,
+`http/request/async_request_body.py`,
+`http/response/async_response*.py`. The `HttpClient.sleep` change was
+not adopted — the retry policy takes a `sleep` callable directly,
+keeping `HttpClient` to a single `execute` method.
 
 - [ ] **`HttpClient.sleep(duration)` method** — added to the Protocol in
       `client/http_client.py` with a default `time.sleep` implementation in a
@@ -313,7 +317,17 @@ under `pytest-asyncio`; SansIO policies run unchanged in both pipelines.
 
 ---
 
-## M4 — Auth & advanced HTTP
+## M4 — Auth & advanced HTTP ✅
+
+Landed. The `http.auth/` package ships `AccessTokenInfo`,
+`TokenCredential` / `AsyncTokenCredential` Protocols, `KeyCredential`,
+`NamedKeyCredential`, `BasicAuthCredential`, `TokenRequestOptions`,
+`KeyCredentialPolicy`, `BasicAuthPolicy`, `BearerTokenPolicy`,
+`AsyncBearerTokenPolicy`, `InMemoryTokenCache`. The `http.common`
+package ships `Pager[T, R]`, `ItemPaged[T]`, `AsyncPager[T, R]`,
+`AsyncItemPaged[T]`.
+
+### Original M4 plan (kept for reference)
 
 - [ ] **`http/auth/access_token.py:AccessTokenInfo`** — frozen dataclass
       mirroring azure:credentials.py: `token: str`, `expires_on: int`
@@ -362,7 +376,15 @@ under `pytest-asyncio`; SansIO policies run unchanged in both pipelines.
 
 ---
 
-## M5 — Streaming & ergonomics
+## M5 — Streaming & ergonomics ✅
+
+Landed. `http.sse` ships `SseEvent`, `SseParser`, `AsyncSseStream`,
+`parse_events`, `parse_async_events`. `http.common.streaming` ships
+`iter_jsonl` / `aiter_jsonl` / `chunked_frame` / `aiter_chunked_frame`.
+`http.request.MultipartRequestBody` (factory
+`RequestBody.from_multipart`) ships replayable form-data bodies.
+
+### Original M5 plan (kept for reference)
 
 - [ ] **`http.sse.SseEvent`** frozen dataclass + `SseParser` driven from an
       `Iterator[bytes]` (sync) or `AsyncIterator[bytes]` (async). Handles
@@ -382,9 +404,20 @@ under `pytest-asyncio`; SansIO policies run unchanged in both pipelines.
 
 ---
 
-## M6 — Observability integrations
+## M6 — Observability integrations ✅ (partial)
 
-These are *optional* extras; the core stays no-deps.
+The in-core pieces landed:
+
+- ``instrumentation.metrics``: `Counter` / `UpDownCounter` / `Histogram`
+  ABCs + `MetricsContext` factory + no-op singletons.
+- ``pipeline.policies.LoggingPolicy``: structured request/response logs
+  via `ClientLogger` + `UrlRedactor`. Opt out with
+  ``ctx.options["logging_enabled"] = False``.
+- ``pipeline.policies.TracingPolicy``: opens a span per request with
+  OTel-compatible semantic-convention attributes. Opt out with
+  ``ctx.options["tracing_enabled"] = False``.
+
+Sibling-package work remains:
 
 - [ ] **`dexpace-sdk-otel`** sibling package — implements `Tracer` / `Span` /
       `TracingScope` over OpenTelemetry's Python API. Provides an
@@ -407,23 +440,22 @@ These are *optional* extras; the core stays no-deps.
 
 ---
 
-## M7 — Documentation
+## M7 — Documentation ✅
 
-- [ ] `docs/architecture.md` — high-level design, package map, data flow.
-- [ ] `docs/bodies.md` — `RequestBody` / `ResponseBody` factories, single-use
-      vs replayable, `iter_bytes` chunking, file/stream/iter shapes, the
-      logging decorators.
-- [ ] `docs/http.md` — request/response models, headers, media types, context
-      promotion chain, `HttpClient` Protocol.
-- [ ] `docs/pipelines.md` — pipeline composition, SansIO step vs Policy,
-      retry semantics, the step Protocols, common built-in steps.
-- [ ] `docs/body-logging.md` — `LoggableRequestBody` / `LoggableResponseBody`
-      mechanics, snapshot caps, concurrency model.
-- [ ] `docs/auth.md` — credential types, token caching, integration with
-      pipelines.
-- [ ] `docs/errors.md` — error hierarchy, when each is raised, ErrorMap.
-- [ ] Sphinx-generated API reference under `docs/api/` (autodoc + intersphinx
-      to stdlib). Optional; only worth it once the surface stabilises.
+Landed under `docs/`:
+
+- [x] `docs/architecture.md` — high-level design, layering, data flow.
+- [x] `docs/bodies.md` — request/response body factories, single-use vs
+      replayable semantics, logging decorators.
+- [x] `docs/http.md` — request/response models, headers, media types,
+      URLs, ETag/range/conditions, context promotion chain.
+- [x] `docs/pipelines.md` — pipeline composition, SansIO step vs Policy,
+      built-in policies, opt-out conventions.
+- [x] `docs/auth.md` — credential types, token caching, bearer
+      challenges.
+- [x] `docs/errors.md` — exception hierarchy, status-code mapping.
+- [ ] Sphinx-generated API reference (`docs/api/`) — optional; only
+      worth it once the surface stabilises further.
 
 ---
 

@@ -1,11 +1,15 @@
-"""Format-agnostic serialization / deserialization contracts.
-
-Concrete implementations live outside ``core`` — ``core`` deliberately ships
-no embedded serializer. Pick an adapter (or write your own) and inject it
-wherever a :class:`Serde` is required.
-"""
+"""Format-agnostic serialization / deserialization contracts and JSON impl."""
 from __future__ import annotations
 
+from .json_serde import JSON_SERDE, JsonDeserializer, JsonSerde, JsonSerializer
 from .serde import Deserializer, Serde, Serializer
 
-__all__ = ["Deserializer", "Serde", "Serializer"]
+__all__ = [
+    "JSON_SERDE",
+    "Deserializer",
+    "JsonDeserializer",
+    "JsonSerde",
+    "JsonSerializer",
+    "Serde",
+    "Serializer",
+]

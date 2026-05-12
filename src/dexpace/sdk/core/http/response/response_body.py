@@ -65,7 +65,11 @@ class ResponseBody(ABC):
         self.close()
 
     def bytes(self) -> _bytes:
-        """Read the entire body as bytes and close the underlying stream.
+        """Read the entire body as bytes.
+
+        The underlying stream is closed as a side effect of exhausting
+        ``iter_bytes``; on early termination the ``finally`` here releases
+        the resource.
 
         Returns:
             The full payload.
@@ -73,6 +77,9 @@ class ResponseBody(ABC):
         try:
             return b"".join(self.iter_bytes())
         finally:
+            # ``iter_bytes`` already closes on normal exhaustion; this
+            # ``finally`` covers the path where ``join`` aborts (e.g.
+            # MemoryError). ``close`` is idempotent.
             self.close()
 
     def string(self, encoding: str | None = None) -> str:

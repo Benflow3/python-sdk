@@ -4,14 +4,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from typing import Self
-from urllib.parse import (
-    parse_qsl,
-    quote,
-    unquote_plus,
-    urlencode,
-    urlsplit,
-    urlunsplit,
-)
+from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 type _QueryValue = str | Iterable[str]
 type _QueryEntries = Mapping[str, _QueryValue] | Iterable[tuple[str, _QueryValue]]
@@ -155,13 +148,17 @@ class QueryParams:
 
     @classmethod
     def parse(cls, raw: str) -> Self:
-        """Parse a ``foo=1&bar=2`` query string (leading ``?`` is tolerated)."""
+        """Parse a ``foo=1&bar=2`` query string (leading ``?`` is tolerated).
+
+        ``parse_qsl`` already percent-decodes keys and values; we do not
+        call ``unquote`` again to avoid double-decoding ``%2520`` → space.
+        """
         if raw.startswith("?"):
             raw = raw[1:]
         if not raw:
             return _construct_query(cls, ())
         pairs = parse_qsl(raw, keep_blank_values=True, strict_parsing=False)
-        return cls(((unquote_plus(k), unquote_plus(v)) for k, v in pairs))
+        return cls(pairs)
 
     @classmethod
     def empty(cls) -> QueryParams:

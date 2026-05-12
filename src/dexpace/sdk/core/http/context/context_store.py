@@ -46,13 +46,17 @@ class _ContextStore:
         """Unconditionally store ``context`` under ``trace_id``.
 
         Used by the promotion chain, where the first promotion installs the
-        entry and later promotions overwrite it.
+        entry and later promotions overwrite it. Holds the lock so the
+        guarantee survives free-threaded CPython (PEP 703) and non-CPython
+        runtimes that don't guarantee atomic dict writes.
         """
-        self._contexts[trace_id] = context
+        with self._lock:
+            self._contexts[trace_id] = context
 
     def remove(self, trace_id: str) -> None:
         """Remove the entry under ``trace_id``. No-op if absent."""
-        self._contexts.pop(trace_id, None)
+        with self._lock:
+            self._contexts.pop(trace_id, None)
 
 
 #: Process-wide :class:`_ContextStore` singleton.

@@ -75,12 +75,14 @@ class MediaType:
             raise ValueError(
                 f"Invalid media type: type=*, subtype={normalized_subtype}"
             )
-        if parameters:
-            params = tuple(
-                sorted((k.lower(), v.lower()) for k, v in parameters.items())
-            )
-        else:
-            params = ()
+        # Parameter *keys* are case-insensitive per RFC 7231, but *values*
+        # are not — multipart boundaries, for example, must round-trip
+        # exactly. Only the key is lower-cased here.
+        params = (
+            tuple(sorted((k.lower(), v) for k, v in parameters.items()))
+            if parameters
+            else ()
+        )
         return cls(normalized_type, normalized_subtype, params)
 
     @classmethod

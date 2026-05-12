@@ -1,0 +1,159 @@
+"""Async twin of ``ResponseBody``."""
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
+from types import TracebackType
+from typing import Self
+
+from ..common.media_type import MediaType
+from ..request.async_request_body import SupportsAsyncRead
+
+_bytes = bytes
+
+
+class AsyncResponseBody(ABC):
+    """Async twin of ``ResponseBody``.
+
+    Surfaces ``aiter_bytes`` / ``bytes()`` / ``string()`` and implements the
+    async context-manager protocol so transport handles release
+    deterministically.
+    """
+
+    @abstractmethod
+    def media_type(self) -> MediaType | None:
+        """Return the media type of the payload, or ``None`` if unknown."""
+
+    @abstractmethod
+    def content_length(self) -> int:
+        """Return the number of bytes available, or ``-1`` if unknown."""
+
+    @abstractmethod
+    def aiter_bytes(self, chunk_size: int = 64 * 1024) -> AsyncIterator[bytes]:
+        """Yield the body's bytes in chunks; closes the body on exhaustion."""
+
+    @abstractmethod
+    async def close(self) -> None:
+        """Release transport resources. Idempotent."""
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        await self.close()
+
+    async def bytes(self) -> _bytes:
+        """Read the entire body as bytes and close the underlying stream."""
+        chunks: list[bytes] = []
+        try:
+            async for chunk in self.aiter_bytes():
+                chunks.append(chunk)
+        finally:
+            await self.close()
+        return b"".join(chunks)
+
+    async def string(self, encoding: str | None = None) -> str:
+        """Read the entire body and decode it as text."""
+        if encoding is None:
+            media = self.media_type()
+            encoding = (media.charset if media is not None else None) or "utf-8"
+        raw = await self.bytes()
+        return raw.decode(encoding)
+
+    @classmethod
+    def from_bytes(
+        cls,
+        data: _bytes,
+        media_type: MediaType | None = None,
+    ) -> AsyncResponseBody:
+        return _AsyncBytesResponseBody(data, media_type)
+
+    @classmethod
+    def from_async_stream(
+        cls,
+        stream: SupportsAsyncRead,
+        media_type: MediaType | None = None,
+        content_length: int = -1,
+    ) -> AsyncResponseBody:
+        return _AsyncStreamResponseBody(stream, media_type, content_length)
+
+
+class _AsyncBytesResponseBody(AsyncResponseBody):
+    """In-memory ``AsyncResponseBody``."""
+
+    __slots__ = ("_closed", "_consumed", "_data", "_media_type")
+
+    def __init__(self, data: _bytes, media_type: MediaType | None) -> None:
+        self._data = data
+        self._media_type = media_type
+        self._consumed = False
+        self._closed = False
+
+    def media_type(self) -> MediaType | None:
+        return self._media_type
+
+    def content_length(self) -> int:
+        return len(self._data)
+
+    async def aiter_bytes(self, chunk_size: int = 64 * 1024) -> AsyncIterator[bytes]:
+        if self._consumed:
+            raise RuntimeError("AsyncResponseBody has already been consumed")
+        self._consumed = True
+        view = memoryview(self._data)
+        for start in range(0, len(view), chunk_size):
+            yield bytes(view[start : start + chunk_size])
+        await self.close()
+
+    async def close(self) -> None:
+        self._closed = True
+
+
+class _AsyncStreamResponseBody(AsyncResponseBody):
+    """Stream-backed single-use ``AsyncResponseBody``."""
+
+    __slots__ = ("_closed", "_consumed", "_length", "_media_type", "_stream")
+
+    def __init__(
+        self,
+        stream: SupportsAsyncRead,
+        media_type: MediaType | None,
+        length: int,
+    ) -> None:
+        self._stream = stream
+        self._media_type = media_type
+        self._length = length
+        self._consumed = False
+        self._closed = False
+
+    def media_type(self) -> MediaType | None:
+        return self._media_type
+
+    def content_length(self) -> int:
+        return self._length
+
+    async def aiter_bytes(self, chunk_size: int = 64 * 1024) -> AsyncIterator[bytes]:
+        if self._consumed:
+            raise RuntimeError("AsyncResponseBody has already been consumed")
+        self._consumed = True
+        try:
+            while True:
+                chunk = await self._stream.read(chunk_size)
+                if not chunk:
+                    return
+                yield chunk
+        finally:
+            await self.close()
+
+    async def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        await self._stream.close()
+
+
+__all__ = ["AsyncResponseBody"]
