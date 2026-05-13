@@ -46,3 +46,27 @@ def test_multiple_values_per_key() -> None:
     redactor = UrlRedactor(allowed_query_keys=set())
     out = redactor.redact("https://example.com/?a=1&a=2")
     assert out.count("a=REDACTED") == 2
+
+
+def test_redactor_redacts_fragment_by_default() -> None:
+    redactor = UrlRedactor()
+    out = redactor.redact("https://x/api?api-version=1#token=abc")
+    assert "abc" not in out
+
+
+def test_redactor_redacts_path_when_enabled() -> None:
+    redactor = UrlRedactor(redact_path=True)
+    out = redactor.redact("https://x/users/123/secret/abc")
+    assert "abc" not in out and "123" not in out
+
+
+def test_fragment_preserved_when_redact_fragment_false() -> None:
+    redactor = UrlRedactor(redact_fragment=False)
+    out = redactor.redact("https://x/api?api-version=1#token=abc")
+    assert "token=abc" in out
+
+
+def test_path_preserved_by_default() -> None:
+    redactor = UrlRedactor()
+    out = redactor.redact("https://x/users/123/secret/abc")
+    assert "/users/123/secret/abc" in out
