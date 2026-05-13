@@ -112,23 +112,4 @@ class FileRequestBody(RequestBody):
                     remaining -= len(chunk)
 
 
-def _from_file(
-    cls: type[RequestBody],
-    path: Path,
-    media_type: MediaType | None = None,
-    offset: int = 0,
-    count: int = -1,
-) -> RequestBody:
-    """``RequestBody.from_file`` implementation, spliced onto the class.
-
-    Defined here rather than in ``request_body.py`` to avoid a circular import.
-    """
-    del cls  # unused; behaves as a classmethod on RequestBody
-    return FileRequestBody(path, media_type, offset, count)
-
-
-# Attach as a classmethod so callers can write `RequestBody.from_file(...)`.
-RequestBody.from_file = classmethod(_from_file)  # type: ignore[attr-defined]
-
-
 __all__ = ["FileRequestBody"]

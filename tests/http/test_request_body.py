@@ -118,7 +118,7 @@ class TestFileRequestBody:
     def test_from_file_factory(self, tmp_path: Path) -> None:
         path = tmp_path / "x.bin"
         path.write_bytes(b"abc")
-        body = RequestBody.from_file(path)  # type: ignore[attr-defined]  # added dynamically in file_request_body
+        body = RequestBody.from_file(path)
         assert isinstance(body, FileRequestBody)
         assert _drain(body) == b"abc"
 

@@ -53,9 +53,7 @@ def test_replayable() -> None:
 
 
 def test_factory() -> None:
-    body = RequestBody.from_multipart(  # type: ignore[attr-defined]
-        [MultipartField(name="a", value="b")]
-    )
+    body = RequestBody.from_multipart([MultipartField(name="a", value="b")])
     assert isinstance(body, MultipartRequestBody)
 
 

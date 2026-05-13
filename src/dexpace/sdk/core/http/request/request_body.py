@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Iterator, Mapping
-from typing import BinaryIO
+from collections.abc import Iterable, Iterator, Mapping, Sequence
+from pathlib import Path
+from typing import TYPE_CHECKING, BinaryIO
 from urllib.parse import quote
 
 from ..common import common_media_types
 from ..common.media_type import MediaType
+
+if TYPE_CHECKING:
+    from .multipart import MultipartField
 
 
 def _check_chunk_size(chunk_size: int) -> None:
@@ -33,9 +37,10 @@ class RequestBody(ABC):
     deciding whether to buffer the body in memory.
 
     Use the classmethod factories (``from_bytes``, ``from_string``,
-    ``from_form``, ``from_stream``, ``from_iter``) rather than subclassing
-    for the common cases. ``FileRequestBody`` covers the file-on-disk case as
-    its own concrete subclass.
+    ``from_form``, ``from_stream``, ``from_iter``, ``from_file``,
+    ``from_multipart``) rather than subclassing for the common cases.
+    ``FileRequestBody`` covers the file-on-disk case as its own concrete
+    subclass.
 
     Concurrent ``iter_bytes`` on a single instance is undefined; built-in
     stream-backed bodies guard with a consumed-flag and fail loudly.
@@ -209,6 +214,66 @@ class RequestBody(ABC):
             ``RuntimeError`` unless ``to_replayable`` was invoked first.
         """
         return _IterBody(chunks, media_type, content_length)
+
+    @classmethod
+    def from_file(
+        cls,
+        path: Path,
+        media_type: MediaType | None = None,
+        offset: int = 0,
+        count: int = -1,
+    ) -> RequestBody:
+        """Build a replayable body that streams from a file on disk.
+
+        The file is re-opened on every ``iter_bytes`` call, so retries are
+        safe. Transports may fast-path with ``os.sendfile`` by isinstance-
+        checking the returned ``FileRequestBody``.
+
+        Args:
+            path: File on disk to stream.
+            media_type: Optional content type.
+            offset: Byte offset from the start of the file.
+            count: Number of bytes to read, or ``-1`` for read-to-EOF.
+
+        Returns:
+            A replayable ``RequestBody`` backed by the given file.
+
+        Raises:
+            ValueError: If ``offset`` is negative or ``count`` is ``0``
+                or less than ``-1``.
+        """
+        from .file_request_body import FileRequestBody
+
+        return FileRequestBody(path, media_type, offset, count)
+
+    @classmethod
+    def from_multipart(
+        cls,
+        fields: Sequence[MultipartField],
+        *,
+        boundary: str | None = None,
+    ) -> RequestBody:
+        """Build a replayable ``multipart/form-data`` body.
+
+        The boundary is generated once at construction so retries see
+        identical bytes (and so loggable wrappers can capture the payload
+        deterministically).
+
+        Args:
+            fields: Non-empty sequence of multipart fields.
+            boundary: Optional explicit boundary; a random one is generated
+                when omitted.
+
+        Returns:
+            A replayable ``RequestBody`` carrying a
+            ``multipart/form-data`` media type with the chosen boundary.
+
+        Raises:
+            ValueError: If ``fields`` is empty.
+        """
+        from .multipart import MultipartRequestBody
+
+        return MultipartRequestBody(fields, boundary=boundary)
 
 
 class _BytesBody(RequestBody):

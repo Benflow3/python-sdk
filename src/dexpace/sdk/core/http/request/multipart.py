@@ -224,17 +224,4 @@ class MultipartRequestBody(RequestBody):
             yield bytes(view[start : start + chunk_size])
 
 
-def _from_multipart(
-    cls: type[RequestBody],
-    fields: Sequence[MultipartField],
-    *,
-    boundary: str | None = None,
-) -> RequestBody:
-    del cls
-    return MultipartRequestBody(fields, boundary=boundary)
-
-
-RequestBody.from_multipart = classmethod(_from_multipart)  # type: ignore[attr-defined]
-
-
 __all__ = ["MultipartField", "MultipartRequestBody"]
