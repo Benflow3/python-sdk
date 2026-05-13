@@ -1,4 +1,5 @@
 """Async ``HttpClient`` Protocol."""
+
 from __future__ import annotations
 
 import asyncio

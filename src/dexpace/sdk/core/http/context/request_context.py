@@ -1,4 +1,5 @@
 """Second link in the context promotion chain."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

@@ -1,4 +1,5 @@
 """Process-wide registry mapping a call's trace id to its current context."""
+
 from __future__ import annotations
 
 import threading

@@ -1,4 +1,5 @@
 """``RequestBody`` decorator that captures a copy of the bytes for logging."""
+
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -42,9 +43,7 @@ class LoggableRequestBody(RequestBody):
             ValueError: If ``max_capture_bytes`` is non-positive.
         """
         if max_capture_bytes <= 0:
-            raise ValueError(
-                f"max_capture_bytes must be positive, got {max_capture_bytes}"
-            )
+            raise ValueError(f"max_capture_bytes must be positive, got {max_capture_bytes}")
         self._inner = inner
         self._tap = BytesIO()
         self._max = max_capture_bytes

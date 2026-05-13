@@ -1,4 +1,5 @@
 """Format-agnostic serialization / deserialization contracts and JSON impl."""
+
 from __future__ import annotations
 
 from .json_serde import JSON_SERDE, JsonDeserializer, JsonSerde, JsonSerializer

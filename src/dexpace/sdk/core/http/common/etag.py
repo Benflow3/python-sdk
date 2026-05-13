@@ -1,4 +1,5 @@
 """RFC 7232 entity-tag value object."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

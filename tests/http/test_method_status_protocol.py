@@ -1,4 +1,5 @@
 """Round-trip tests for the small HTTP enums."""
+
 from __future__ import annotations
 
 import pytest
@@ -28,15 +29,18 @@ def test_status_is_success_property() -> None:
     assert not Status.INTERNAL_SERVER_ERROR.is_success
 
 
-@pytest.mark.parametrize("status,success", [
-    (Status.OK, True),
-    (Status.CREATED, True),
-    (Status.NO_CONTENT, True),
-    (Status.MULTIPLE_CHOICES, False),
-    (Status.BAD_REQUEST, False),
-    (Status.NOT_FOUND, False),
-    (Status.INTERNAL_SERVER_ERROR, False),
-])
+@pytest.mark.parametrize(
+    "status,success",
+    [
+        (Status.OK, True),
+        (Status.CREATED, True),
+        (Status.NO_CONTENT, True),
+        (Status.MULTIPLE_CHOICES, False),
+        (Status.BAD_REQUEST, False),
+        (Status.NOT_FOUND, False),
+        (Status.INTERNAL_SERVER_ERROR, False),
+    ],
+)
 def test_status_success_band(status: Status, success: bool) -> None:
     assert status.is_success is success
 

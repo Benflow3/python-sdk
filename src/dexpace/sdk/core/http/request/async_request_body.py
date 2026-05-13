@@ -1,4 +1,5 @@
 """Async twin of ``RequestBody``."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -98,9 +99,7 @@ class AsyncRequestBody(ABC):
         fields: Mapping[str, str],
         encoding: str = "utf-8",
     ) -> AsyncRequestBody:
-        encoded = "&".join(
-            f"{quote(k, safe='')}={quote(v, safe='')}" for k, v in fields.items()
-        )
+        encoded = "&".join(f"{quote(k, safe='')}={quote(v, safe='')}" for k, v in fields.items())
         return _AsyncBytesBody(
             encoded.encode(encoding),
             common_media_types.APPLICATION_FORM_URLENCODED,
@@ -211,8 +210,7 @@ class _AsyncStreamBody(AsyncRequestBody):
     async def aiter_bytes(self, chunk_size: int = 64 * 1024) -> AsyncIterator[bytes]:
         if self._consumed:
             raise RuntimeError(
-                "AsyncRequestBody.aiter_bytes was already called — the "
-                "stream is exhausted."
+                "AsyncRequestBody.aiter_bytes was already called — the stream is exhausted."
             )
         self._consumed = True
         try:

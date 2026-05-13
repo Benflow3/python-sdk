@@ -1,4 +1,5 @@
 """Credential Protocols and simple concrete credentials."""
+
 from __future__ import annotations
 
 import base64

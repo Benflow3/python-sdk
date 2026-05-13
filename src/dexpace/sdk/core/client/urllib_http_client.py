@@ -9,6 +9,7 @@ exposes the response body as a :class:`ResponseBody.from_stream` wrapper so
 streaming reads are possible. Maps urllib's exception types into the SDK
 error hierarchy.
 """
+
 from __future__ import annotations
 
 from socket import timeout as _SocketTimeout  # noqa: N812 — re-exporting the stdlib lowercase name

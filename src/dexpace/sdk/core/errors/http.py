@@ -1,4 +1,5 @@
 """Exceptions raised for non-2xx HTTP responses."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any

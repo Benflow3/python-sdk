@@ -1,4 +1,5 @@
 """Terminal Policy that hands the request to the configured ``HttpClient``."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

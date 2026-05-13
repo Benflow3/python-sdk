@@ -1,4 +1,5 @@
 """Async twin of ``Pipeline``."""
+
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Sequence
@@ -96,9 +97,7 @@ class AsyncPipeline:
 
 def _wrap_step(step: Any) -> AsyncPolicy:
     if not callable(step):
-        raise TypeError(
-            f"Pipeline step {step!r} is neither an AsyncPolicy nor a callable."
-        )
+        raise TypeError(f"Pipeline step {step!r} is neither an AsyncPolicy nor a callable.")
     side = getattr(step, "side", "request")
     if side == "response":
         return _AsyncSansIOResponseRunner(step)

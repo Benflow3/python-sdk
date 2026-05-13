@@ -1,4 +1,5 @@
 """Composable request/response processing pipeline (sync + async)."""
+
 from __future__ import annotations
 
 from .async_pipeline import AsyncPipeline

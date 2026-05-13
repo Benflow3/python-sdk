@@ -1,4 +1,5 @@
 """Tests for ``Url`` parsing/serialisation and ``QueryParams`` multi-value behaviour."""
+
 from __future__ import annotations
 
 import pytest

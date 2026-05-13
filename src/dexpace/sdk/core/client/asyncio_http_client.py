@@ -15,6 +15,7 @@ The implementation handles only:
 These limits keep the reference implementation small enough to verify by
 inspection. For anything else, plug in a proper adapter.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -107,9 +108,7 @@ class AsyncioHttpClient:
                 f"Connect to {host}:{port} timed out", error=err
             ) from err
         except OSError as err:
-            raise ServiceRequestError(
-                f"Connect to {host}:{port} failed: {err}", error=err
-            ) from err
+            raise ServiceRequestError(f"Connect to {host}:{port} failed: {err}", error=err) from err
 
     async def _send(
         self,

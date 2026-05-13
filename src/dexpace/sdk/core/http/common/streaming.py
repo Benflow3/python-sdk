@@ -3,6 +3,7 @@
 These are SansIO utilities: they consume / produce ``Iterator[bytes]`` (or
 ``AsyncIterator[bytes]``) and do no I/O on their own.
 """
+
 from __future__ import annotations
 
 import json

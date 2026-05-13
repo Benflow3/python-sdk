@@ -9,6 +9,7 @@ Returning ``None`` from a SansIO step short-circuits the chain (raises
 ``PipelineAbortedError``); this matches the convention used elsewhere in the
 SDK for "do not forward".
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

@@ -1,4 +1,5 @@
 """Tests for ``AsyncioHttpClient`` against an in-loop asyncio server."""
+
 from __future__ import annotations
 
 import asyncio

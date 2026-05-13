@@ -12,6 +12,7 @@ A call moves through three immutable context shapes as it executes:
 Each promotion is registered with :data:`ContextStore` under the call's trace
 id so downstream observers see the latest snapshot for a call by trace id.
 """
+
 from __future__ import annotations
 
 from .call_context import CallContext

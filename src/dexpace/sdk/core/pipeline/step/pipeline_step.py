@@ -8,6 +8,7 @@ without each step needing to know about ``.next``.
 For steps that need to wrap the downstream chain (retry, auth challenges,
 span lifecycles), implement ``pipeline.Policy`` directly instead.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Protocol, runtime_checkable

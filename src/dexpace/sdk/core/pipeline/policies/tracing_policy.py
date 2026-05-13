@@ -1,4 +1,5 @@
 """Pipeline policy that opens a span around the downstream chain."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

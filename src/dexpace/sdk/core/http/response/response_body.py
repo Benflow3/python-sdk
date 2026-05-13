@@ -1,4 +1,5 @@
 """Body of an HTTP response — abstract base plus built-in factories."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

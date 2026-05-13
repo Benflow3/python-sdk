@@ -18,6 +18,7 @@ Per-event fields:
 - ``id``: the last-event-id (sticky across the parser's lifetime per spec).
 - ``retry``: reconnect time in milliseconds, when the server sends one.
 """
+
 from __future__ import annotations
 
 from collections import deque

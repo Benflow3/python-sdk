@@ -1,4 +1,5 @@
 """Pluggable token cache for the bearer-token policy."""
+
 from __future__ import annotations
 
 import threading

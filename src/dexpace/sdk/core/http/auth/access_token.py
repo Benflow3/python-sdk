@@ -1,4 +1,5 @@
 """OAuth-style access-token value object."""
+
 from __future__ import annotations
 
 import time

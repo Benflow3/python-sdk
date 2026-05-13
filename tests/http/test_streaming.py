@@ -1,4 +1,5 @@
 """Tests for ``iter_jsonl`` / ``chunked_frame`` helpers."""
+
 from __future__ import annotations
 
 from collections.abc import AsyncIterator

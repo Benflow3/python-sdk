@@ -1,4 +1,5 @@
 """Base type for in-flight call contexts."""
+
 from __future__ import annotations
 
 from types import TracebackType

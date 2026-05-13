@@ -1,4 +1,5 @@
 """Shared HTTP value objects: headers, media types, URLs, ranges, pagination, streaming."""
+
 from __future__ import annotations
 
 from . import common_media_types, http_header_name

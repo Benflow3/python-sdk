@@ -1,4 +1,5 @@
 """Terminal async policy that hands the request to the configured ``AsyncHttpClient``."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

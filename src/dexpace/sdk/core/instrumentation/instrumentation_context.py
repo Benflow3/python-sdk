@@ -1,4 +1,5 @@
 """Metadata carried with every traced operation (W3C Trace Context)."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

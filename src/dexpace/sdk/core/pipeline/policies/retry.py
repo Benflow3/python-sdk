@@ -13,6 +13,7 @@ re-emit the same payload without raising ``RuntimeError``. The buffering
 step is skipped when ``total_retries == 0`` so callers who explicitly opt
 out of retries pay no memory cost.
 """
+
 from __future__ import annotations
 
 import logging
@@ -40,6 +41,7 @@ if TYPE_CHECKING:
     from ..context import PipelineContext
 
 _LOGGER = logging.getLogger(__name__)
+
 
 @runtime_checkable
 class _ResponseLike(Protocol):

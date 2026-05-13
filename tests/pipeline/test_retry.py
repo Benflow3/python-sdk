@@ -1,4 +1,5 @@
 """Tests for ``RetryPolicy`` behaviour."""
+
 from __future__ import annotations
 
 import time

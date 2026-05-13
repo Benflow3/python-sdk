@@ -1,4 +1,5 @@
 """Tests for ``UrllibHttpClient`` against a tiny in-process TCP server."""
+
 from __future__ import annotations
 
 import socketserver

@@ -1,4 +1,5 @@
 """``ResponseBody`` decorator that caches bytes for repeatable reads + logging."""
+
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -40,9 +41,7 @@ class LoggableResponseBody(ResponseBody):
             ValueError: If ``max_capture_bytes`` is non-positive.
         """
         if max_capture_bytes <= 0:
-            raise ValueError(
-                f"max_capture_bytes must be positive, got {max_capture_bytes}"
-            )
+            raise ValueError(f"max_capture_bytes must be positive, got {max_capture_bytes}")
         self._inner = inner
         self._max = max_capture_bytes
         self._cached: bytes = b""

@@ -1,4 +1,5 @@
 """Tests for ``UrlRedactor``."""
+
 from __future__ import annotations
 
 from dexpace.sdk.core.http.common import Url
@@ -15,9 +16,7 @@ def test_strips_userinfo() -> None:
 
 def test_allowlisted_query_unredacted() -> None:
     redactor = UrlRedactor()
-    redacted = redactor.redact(
-        "https://api.example.com/v1?api-version=1.0&token=hunter2"
-    )
+    redacted = redactor.redact("https://api.example.com/v1?api-version=1.0&token=hunter2")
     assert "api-version=1.0" in redacted
     assert "token=REDACTED" in redacted
     assert "hunter2" not in redacted

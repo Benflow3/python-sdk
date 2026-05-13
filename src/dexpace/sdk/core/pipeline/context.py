@@ -11,6 +11,7 @@ the dict-subclass gymnastics: ``options`` and ``data`` are plain dicts on a
 slotted dataclass, with a typed ``call`` field linking back to the immutable
 telemetry context.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

@@ -1,4 +1,5 @@
 """Replayable ``RequestBody`` backed by a file on disk."""
+
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -54,9 +55,7 @@ class FileRequestBody(RequestBody):
         if offset < 0:
             raise ValueError(f"offset must be non-negative, got {offset}")
         if count < -1 or count == 0:
-            raise ValueError(
-                f"count must be -1 (read to EOF) or positive, got {count}"
-            )
+            raise ValueError(f"count must be -1 (read to EOF) or positive, got {count}")
         self._path = path
         self._media_type = media_type
         self._offset = offset

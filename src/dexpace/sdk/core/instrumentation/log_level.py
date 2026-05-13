@@ -1,4 +1,5 @@
 """Log levels used by SDK loggers."""
+
 from __future__ import annotations
 
 from enum import Enum

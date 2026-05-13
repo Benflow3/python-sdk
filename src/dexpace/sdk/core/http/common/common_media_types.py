@@ -3,6 +3,7 @@
 Exposed as module-level constants. Reusing these avoids re-parsing the same
 media-type string on hot paths.
 """
+
 from __future__ import annotations
 
 from typing import Final

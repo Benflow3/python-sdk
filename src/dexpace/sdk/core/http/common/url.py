@@ -1,4 +1,5 @@
 """Immutable URL value objects with `urllib.parse` interop centralised."""
+
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator, Mapping
@@ -86,9 +87,7 @@ class QueryParams:
 
     def flatten(self) -> tuple[tuple[str, str], ...]:
         """Flat ``[(name, value), …]`` tuple — one entry per value, in order."""
-        return tuple(
-            (key, value) for key, values in self._data for value in values
-        )
+        return tuple((key, value) for key, values in self._data for value in values)
 
     def with_added(self, name: str, value: str) -> Self:
         entries: list[tuple[str, tuple[str, ...]]] = []
@@ -221,9 +220,7 @@ class Url:
 
     def __str__(self) -> str:
         query_string = self.query.encode() if len(self.query) else ""
-        return urlunsplit(
-            (self.scheme, self.authority, self.path, query_string, self.fragment)
-        )
+        return urlunsplit((self.scheme, self.authority, self.path, query_string, self.fragment))
 
     def with_path(self, path: str) -> Self:
         return replace(self, path=path)

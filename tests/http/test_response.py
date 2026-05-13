@@ -1,4 +1,5 @@
 """Tests for ``Response`` immutability and context-manager behaviour."""
+
 from __future__ import annotations
 
 from dexpace.sdk.core.http.common import Headers, Protocol

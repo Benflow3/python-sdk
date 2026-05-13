@@ -1,4 +1,5 @@
 """Regression tests for issues discovered in the line-by-line review."""
+
 from __future__ import annotations
 
 from dexpace.sdk.core.client.http_client import HttpClient

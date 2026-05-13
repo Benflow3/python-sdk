@@ -5,6 +5,7 @@ Modelled on Azure's ``corehttp.paging``: caller supplies two callables —
 to extract the next token plus the items in that page. The iterator yields
 items or pages depending on which iterator surface the consumer uses.
 """
+
 from __future__ import annotations
 
 from collections.abc import (

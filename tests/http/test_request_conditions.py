@@ -1,4 +1,5 @@
 """Tests for ``RequestConditions.apply_to``."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime

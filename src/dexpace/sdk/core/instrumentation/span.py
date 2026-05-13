@@ -1,4 +1,5 @@
 """Unit of work in a distributed trace."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

@@ -1,4 +1,5 @@
 """Top-of-hierarchy exception types."""
+
 from __future__ import annotations
 
 import sys

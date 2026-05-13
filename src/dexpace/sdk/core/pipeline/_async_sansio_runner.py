@@ -6,6 +6,7 @@ detects coroutine results and awaits them. This is Azure's
 ``inspect.iscoroutinefunction`` pattern, adapted to use ``asyncio.iscoroutine``
 on the returned object so wrapped/bound callables still work.
 """
+
 from __future__ import annotations
 
 import asyncio

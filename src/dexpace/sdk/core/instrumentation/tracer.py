@@ -1,4 +1,5 @@
 """Factory for :class:`Span` instances."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

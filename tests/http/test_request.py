@@ -1,4 +1,5 @@
 """Tests for ``Request`` immutability and the ``with_*`` helpers."""
+
 from __future__ import annotations
 
 import pytest

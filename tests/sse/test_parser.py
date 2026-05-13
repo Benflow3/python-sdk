@@ -1,4 +1,5 @@
 """Tests for the WHATWG SSE parser."""
+
 from __future__ import annotations
 
 import contextlib

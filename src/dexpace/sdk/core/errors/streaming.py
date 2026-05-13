@@ -1,4 +1,5 @@
 """Exceptions raised for body / stream lifecycle violations."""
+
 from __future__ import annotations
 
 from .base import SdkError

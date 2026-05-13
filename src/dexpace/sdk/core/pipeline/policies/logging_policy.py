@@ -1,4 +1,5 @@
 """Pipeline policy that emits structured request/response logs."""
+
 from __future__ import annotations
 
 import time

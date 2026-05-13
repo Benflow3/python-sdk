@@ -5,6 +5,7 @@ real implementation lives in a sibling package (e.g.
 ``dexpace-sdk-otel``); the no-op singletons cover the "tracing disabled"
 case so SDK code can always emit metrics without conditional checks.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -44,7 +45,9 @@ class MetricsContext(ABC):
     """
 
     @abstractmethod
-    def counter(self, name: str, *, unit: str | None = None, description: str | None = None) -> Counter:
+    def counter(
+        self, name: str, *, unit: str | None = None, description: str | None = None
+    ) -> Counter:
         """Build a counter instrument named ``name``."""
 
     @abstractmethod
@@ -87,7 +90,9 @@ class _NoopHistogram(Histogram):
 
 
 class _NoopMetricsContext(MetricsContext):
-    def counter(self, name: str, *, unit: str | None = None, description: str | None = None) -> Counter:
+    def counter(
+        self, name: str, *, unit: str | None = None, description: str | None = None
+    ) -> Counter:
         del name, unit, description
         return NOOP_COUNTER
 

@@ -1,4 +1,5 @@
 """Tests for ``ClientLogger`` structured emission."""
+
 from __future__ import annotations
 
 import logging

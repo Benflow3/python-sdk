@@ -1,4 +1,5 @@
 """Status-code → exception-type mapping helper."""
+
 from __future__ import annotations
 
 from collections.abc import Mapping

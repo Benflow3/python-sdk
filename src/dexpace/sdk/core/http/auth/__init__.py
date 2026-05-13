@@ -1,4 +1,5 @@
 """Credential types and built-in authentication policies."""
+
 from __future__ import annotations
 
 from .access_token import AccessTokenInfo, TokenRequestOptions

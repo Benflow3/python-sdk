@@ -1,4 +1,5 @@
 """Tests for ``Pager`` / ``ItemPaged`` and their async twins."""
+
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable

@@ -1,4 +1,5 @@
 """Entry point of the context promotion chain."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

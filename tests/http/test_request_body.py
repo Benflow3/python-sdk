@@ -1,4 +1,5 @@
 """Tests for ``RequestBody`` factories and the ``LoggableRequestBody`` / ``FileRequestBody`` wrappers."""
+
 from __future__ import annotations
 
 from collections.abc import Callable

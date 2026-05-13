@@ -1,4 +1,5 @@
 """Structured logger wrapper for SDK-internal use."""
+
 from __future__ import annotations
 
 import logging
@@ -48,7 +49,9 @@ class ClientLogger:
         py_level = _LEVEL_MAP[level]
         if not self._logger.isEnabledFor(py_level):
             return
-        self._logger.log(py_level, "%s %s", message, _format_fields({**self._static_fields, **fields}))
+        self._logger.log(
+            py_level, "%s %s", message, _format_fields({**self._static_fields, **fields})
+        )
 
     def error(self, message: str, **fields: Any) -> None:
         """Emit a structured record at ``ERROR`` level."""
@@ -71,7 +74,7 @@ def _format_fields(fields: dict[str, Any]) -> str:
     parts: list[str] = []
     for key, value in fields.items():
         rendered = str(value)
-        if any(c in rendered for c in " \t\""):
+        if any(c in rendered for c in ' \t"'):
             rendered = '"' + rendered.replace('"', '\\"') + '"'
         parts.append(f"{key}={rendered}")
     return " ".join(parts)

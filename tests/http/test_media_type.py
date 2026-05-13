@@ -1,4 +1,5 @@
 """Tests for ``MediaType`` parsing, equality, and includes/wildcards."""
+
 from __future__ import annotations
 
 import pytest

@@ -1,4 +1,5 @@
 """Payload of an HTTP request — typed body abstractions + factories."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -160,9 +161,7 @@ class RequestBody(ABC):
         Returns:
             A replayable form body carrying the standard media type.
         """
-        encoded = "&".join(
-            f"{quote(k, safe='')}={quote(v, safe='')}" for k, v in fields.items()
-        )
+        encoded = "&".join(f"{quote(k, safe='')}={quote(v, safe='')}" for k, v in fields.items())
         return _BytesBody(
             encoded.encode(encoding),
             common_media_types.APPLICATION_FORM_URLENCODED,

@@ -1,4 +1,5 @@
 """Composable HTTP pipeline — context-manager wrapper around an ordered policy chain."""
+
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
@@ -68,8 +69,7 @@ class Pipeline:
         """
         self.transport = transport
         wrapped: list[Policy] = [
-            entry if isinstance(entry, Policy) else _wrap_step(entry)
-            for entry in (policies or [])
+            entry if isinstance(entry, Policy) else _wrap_step(entry) for entry in (policies or [])
         ]
         for i, policy in enumerate(wrapped[:-1]):
             policy.next = wrapped[i + 1]

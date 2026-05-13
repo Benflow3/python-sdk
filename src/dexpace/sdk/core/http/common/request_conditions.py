@@ -1,4 +1,5 @@
 """Conditional-request preconditions for `If-Match` / `If-None-Match` family."""
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -55,9 +56,7 @@ class RequestConditions:
         if self.if_match is not None:
             result = result.with_header(IF_MATCH, _format_etags(self.if_match))
         if self.if_none_match is not None:
-            result = result.with_header(
-                IF_NONE_MATCH, _format_etags(self.if_none_match)
-            )
+            result = result.with_header(IF_NONE_MATCH, _format_etags(self.if_none_match))
         if self.if_modified_since is not None:
             result = result.with_header(
                 IF_MODIFIED_SINCE, _format_http_date(self.if_modified_since)

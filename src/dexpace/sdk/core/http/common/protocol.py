@@ -1,4 +1,5 @@
 """HTTP protocol versions describable on a :class:`Response`."""
+
 from __future__ import annotations
 
 from enum import StrEnum

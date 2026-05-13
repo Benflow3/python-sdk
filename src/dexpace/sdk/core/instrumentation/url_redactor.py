@@ -1,4 +1,5 @@
 """Redact sensitive components from URLs before log emission."""
+
 from __future__ import annotations
 
 from collections.abc import Iterable

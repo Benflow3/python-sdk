@@ -1,4 +1,5 @@
 """Tests for ``LoggingPolicy`` and ``TracingPolicy``."""
+
 from __future__ import annotations
 
 import logging
@@ -43,7 +44,9 @@ def _request(url: str = "https://api.example.com/v1?token=secret&api-version=1.0
 
 
 class _OkClient(HttpClient):
-    def __init__(self, *, status: Status = Status.OK, raise_exc: BaseException | None = None) -> None:
+    def __init__(
+        self, *, status: Status = Status.OK, raise_exc: BaseException | None = None
+    ) -> None:
         self.status = status
         self.raise_exc = raise_exc
 
@@ -75,8 +78,7 @@ class TestLoggingPolicy:
         ):
             p.run(_request(), DispatchContext(_instr("0" * 16 + "2")))
         assert any(
-            "http.error" in rec.getMessage()
-            and "ServiceRequestError" in rec.getMessage()
+            "http.error" in rec.getMessage() and "ServiceRequestError" in rec.getMessage()
             for rec in caplog.records
         )
 
@@ -169,10 +171,13 @@ class TestTracingPolicy:
     def test_records_error_on_exception(self) -> None:
         tracer = _RecordingTracer()
         boom = ServiceRequestError("nope")
-        with Pipeline(
-            _OkClient(raise_exc=boom),
-            policies=[TracingPolicy(tracer=tracer)],
-        ) as p, pytest.raises(ServiceRequestError):
+        with (
+            Pipeline(
+                _OkClient(raise_exc=boom),
+                policies=[TracingPolicy(tracer=tracer)],
+            ) as p,
+            pytest.raises(ServiceRequestError),
+        ):
             p.run(_request(), DispatchContext(_instr("0" * 16 + "5")))
         span = tracer.spans[0]
         assert span.error_type == "ServiceRequestError"

@@ -1,4 +1,5 @@
 """HTTP request methods."""
+
 from __future__ import annotations
 
 from enum import StrEnum

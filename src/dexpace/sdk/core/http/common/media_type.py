@@ -1,4 +1,5 @@
 """RFC 7231 media type model."""
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -72,17 +73,11 @@ class MediaType:
         normalized_type = type.lower()
         normalized_subtype = subtype.lower()
         if normalized_type == "*" and normalized_subtype != "*":
-            raise ValueError(
-                f"Invalid media type: type=*, subtype={normalized_subtype}"
-            )
+            raise ValueError(f"Invalid media type: type=*, subtype={normalized_subtype}")
         # Parameter *keys* are case-insensitive per RFC 7231, but *values*
         # are not — multipart boundaries, for example, must round-trip
         # exactly. Only the key is lower-cased here.
-        params = (
-            tuple(sorted((k.lower(), v) for k, v in parameters.items()))
-            if parameters
-            else ()
-        )
+        params = tuple(sorted((k.lower(), v) for k, v in parameters.items())) if parameters else ()
         return cls(normalized_type, normalized_subtype, params)
 
     @classmethod

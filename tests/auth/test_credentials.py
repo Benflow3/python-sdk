@@ -1,4 +1,5 @@
 """Tests for credential types and the token cache."""
+
 from __future__ import annotations
 
 import time

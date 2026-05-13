@@ -1,4 +1,5 @@
 """No-op singletons for tracing-disabled code paths."""
+
 from __future__ import annotations
 
 from typing import Any, Final

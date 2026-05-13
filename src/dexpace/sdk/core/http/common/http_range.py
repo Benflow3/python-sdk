@@ -1,4 +1,5 @@
 """RFC 7233 byte-range value object for `Range` and `Content-Range` headers."""
+
 from __future__ import annotations
 
 from collections.abc import Sequence

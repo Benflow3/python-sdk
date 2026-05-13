@@ -1,4 +1,5 @@
 """W3C Trace Context identifiers (TraceId, SpanId, TraceFlags, TraceState)."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
