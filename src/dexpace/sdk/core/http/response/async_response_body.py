@@ -117,7 +117,24 @@ class _AsyncBytesResponseBody(AsyncResponseBody):
 
 
 class _AsyncStreamResponseBody(AsyncResponseBody):
-    """Stream-backed single-use ``AsyncResponseBody``."""
+    """Stream-backed single-use ``AsyncResponseBody``.
+
+    Note:
+        Cancellation contract. The generator returned by ``aiter_bytes``
+        relies on a ``finally: await self.close()`` clause to release the
+        underlying stream. If the consuming task is cancelled
+        mid-iteration, that ``finally`` block runs while a
+        ``CancelledError`` is already in flight; depending on the host
+        transport, the inner ``await self._stream.close()`` may itself be
+        cancelled before it completes, leaving the stream open. The async
+        generator's ``aclose()`` is best-effort under cancellation.
+
+        Callers that may be cancelled mid-stream are responsible for
+        deterministic cleanup: wrap the body in ``async with body:`` or
+        invoke ``await body.close()`` explicitly from a cancellation-safe
+        scope (for example, an ``asyncio.shield`` inside a ``finally``
+        block) to guarantee the transport handle is released.
+    """
 
     __slots__ = ("_closed", "_consumed", "_length", "_media_type", "_stream")
 
