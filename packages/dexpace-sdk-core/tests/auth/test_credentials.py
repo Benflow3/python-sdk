@@ -16,6 +16,8 @@ from dexpace.sdk.core.http.auth import (
     NamedKeyCredential,
 )
 
+from ..conftest import FakeClock
+
 
 class TestAccessTokenInfo:
     def test_is_expired_in_past(self) -> None:
@@ -38,6 +40,14 @@ class TestAccessTokenInfo:
     def test_repr_redacts_token(self) -> None:
         token = AccessTokenInfo(token="hunter2", expires_on=0)
         assert "hunter2" not in repr(token)
+
+    def test_needs_refresh_uses_injected_clock(self) -> None:
+        """``needs_refresh`` consults ``clock.now()`` when no ``now`` is given."""
+        token = AccessTokenInfo(token="t", expires_on=100)
+        clock = FakeClock(start=50)
+        assert not token.needs_refresh(leeway_seconds=0, clock=clock)
+        clock.advance(50)
+        assert token.needs_refresh(leeway_seconds=0, clock=clock)
 
 
 class TestKeyCredential:

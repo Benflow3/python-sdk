@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 from ...errors import ClientAuthenticationError, ServiceRequestError
 from ...pipeline.async_policy import AsyncPolicy
 from ...pipeline.policy import Policy
+from ...util.clock import ASYNC_SYSTEM_CLOCK, SYSTEM_CLOCK, AsyncClock, Clock
 from .access_token import AccessTokenInfo, TokenRequestOptions
 from .credentials import (
     AsyncTokenCredential,
@@ -90,7 +91,7 @@ class BearerTokenPolicy(Policy):
     to handle CAE/claims challenges.
     """
 
-    __slots__ = ("_audience", "_cache", "_credential", "_lock", "_scopes")
+    __slots__ = ("_audience", "_cache", "_clock", "_credential", "_lock", "_scopes")
 
     def __init__(
         self,
@@ -98,6 +99,7 @@ class BearerTokenPolicy(Policy):
         *scopes: str,
         cache: TokenCache | None = None,
         audience: str | None = None,
+        clock: Clock | None = None,
     ) -> None:
         if not scopes:
             raise ValueError("at least one scope is required")
@@ -105,6 +107,7 @@ class BearerTokenPolicy(Policy):
         self._scopes = scopes
         self._cache: TokenCache = cache or InMemoryTokenCache()
         self._audience = audience
+        self._clock: Clock = clock if clock is not None else SYSTEM_CLOCK
         self._lock = threading.Lock()
 
     def send(self, request: Request, ctx: PipelineContext) -> Response:
@@ -157,11 +160,11 @@ class BearerTokenPolicy(Policy):
                 "Bearer token authentication is not permitted for non-HTTPS URLs."
             )
         token = self._cache.get(self._scopes, self._audience)
-        if force_refresh or token is None or token.needs_refresh():
+        if force_refresh or token is None or token.needs_refresh(clock=self._clock):
             with self._lock:
                 # Double-checked: another thread may have refreshed while we waited.
                 token = self._cache.get(self._scopes, self._audience)
-                if force_refresh or token is None or token.needs_refresh():
+                if force_refresh or token is None or token.needs_refresh(clock=self._clock):
                     options = _token_options(ctx.options)
                     token = self._credential.get_token_info(*self._scopes, options=options)
                     self._cache.set(self._scopes, token, self._audience)
@@ -178,7 +181,7 @@ class AsyncBearerTokenPolicy(AsyncPolicy):
     ``send`` concurrently.
     """
 
-    __slots__ = ("_audience", "_cache", "_credential", "_lock", "_scopes")
+    __slots__ = ("_audience", "_cache", "_clock", "_credential", "_lock", "_scopes")
 
     def __init__(
         self,
@@ -186,6 +189,7 @@ class AsyncBearerTokenPolicy(AsyncPolicy):
         *scopes: str,
         cache: TokenCache | None = None,
         audience: str | None = None,
+        clock: AsyncClock | None = None,
     ) -> None:
         if not scopes:
             raise ValueError("at least one scope is required")
@@ -193,6 +197,10 @@ class AsyncBearerTokenPolicy(AsyncPolicy):
         self._scopes = scopes
         self._cache: TokenCache = cache or InMemoryTokenCache()
         self._audience = audience
+        # ``AsyncClock`` is forwarded to the sync ``needs_refresh`` helper:
+        # only ``now()`` is consulted there (which is sync on both Clock
+        # variants), so the protocol mismatch on ``sleep`` is irrelevant.
+        self._clock: AsyncClock = clock if clock is not None else ASYNC_SYSTEM_CLOCK
         self._lock = asyncio.Lock()
 
     async def send(self, request: Request, ctx: PipelineContext) -> AsyncResponse:
@@ -240,11 +248,11 @@ class AsyncBearerTokenPolicy(AsyncPolicy):
                 "Bearer token authentication is not permitted for non-HTTPS URLs."
             )
         token = self._cache.get(self._scopes, self._audience)
-        if force_refresh or token is None or token.needs_refresh():
+        if force_refresh or token is None or token.needs_refresh(clock=self._clock):
             async with self._lock:
                 # Double-checked: another task may have refreshed while we waited.
                 token = self._cache.get(self._scopes, self._audience)
-                if force_refresh or token is None or token.needs_refresh():
+                if force_refresh or token is None or token.needs_refresh(clock=self._clock):
                     options = _token_options(ctx.options)
                     token = await self._credential.get_token_info(*self._scopes, options=options)
                     self._cache.set(self._scopes, token, self._audience)

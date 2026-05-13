@@ -35,6 +35,8 @@ from dexpace.sdk.core.instrumentation import (
 from dexpace.sdk.core.instrumentation.noop import NOOP_SPAN
 from dexpace.sdk.core.pipeline import AsyncPipeline, Pipeline
 
+from ..conftest import FakeClock
+
 
 def _instr(trace: str) -> InstrumentationContext:
     return InstrumentationContext(
@@ -103,10 +105,16 @@ def test_basic_auth_policy_stamps_header() -> None:
 class _StaticCredential:
     """Minimal TokenCredential — returns the same token unless explicitly told."""
 
-    def __init__(self, token: str = "abc", expires_in: int = 3600) -> None:
+    def __init__(
+        self,
+        token: str = "abc",
+        expires_in: int = 3600,
+        clock: FakeClock | None = None,
+    ) -> None:
         self.calls = 0
         self.token = token
         self.expires_in = expires_in
+        self._clock = clock
 
     def get_token_info(
         self,
@@ -115,9 +123,10 @@ class _StaticCredential:
     ) -> AccessTokenInfo:
         del scopes, options
         self.calls += 1
+        now = self._clock.now() if self._clock is not None else time.time()
         return AccessTokenInfo(
             token=self.token,
-            expires_on=int(time.time()) + self.expires_in,
+            expires_on=int(now) + self.expires_in,
         )
 
     def close(self) -> None:
@@ -141,6 +150,22 @@ def test_bearer_token_policy_caches_token() -> None:
         p.run(_request(), DispatchContext(_instr("0" * 16 + "5")))
         p.run(_request(), DispatchContext(_instr("0" * 16 + "6")))
     assert cred.calls == 1
+
+
+def test_bearer_policy_refreshes_when_clock_advances_past_expiry() -> None:
+    """Advancing the injected clock past ``expires_on`` triggers a re-fetch."""
+    client = _CapturingClient()
+    clock = FakeClock(start=1_000.0)
+    # 1h-lived token; the policy's default 5-min leeway means it refreshes
+    # once the clock crosses (expires_on - 300). Advance well past expiry.
+    cred = _StaticCredential(expires_in=3600, clock=clock)
+    policy = BearerTokenPolicy(cred, "scope-a", clock=clock)
+    with Pipeline(client, policies=[policy]) as p:
+        p.run(_request(), DispatchContext(_instr("0" * 16 + "a")))
+        assert cred.calls == 1
+        clock.advance(3600)
+        p.run(_request(), DispatchContext(_instr("0" * 16 + "b")))
+    assert cred.calls == 2
 
 
 def test_bearer_token_policy_enforces_https() -> None:
@@ -183,10 +208,11 @@ def test_bearer_token_policy_on_challenge_hook() -> None:
 class _SlowCredential:
     """TokenCredential whose token fetch is slow — exercises concurrent refresh."""
 
-    def __init__(self, delay: float = 0.05) -> None:
+    def __init__(self, delay: float = 0.05, clock: FakeClock | None = None) -> None:
         self.calls = 0
         self._delay = delay
         self._lock = threading.Lock()
+        self._clock = clock
 
     def get_token_info(
         self,
@@ -197,7 +223,8 @@ class _SlowCredential:
         with self._lock:
             self.calls += 1
         time.sleep(self._delay)
-        return AccessTokenInfo(token="abc", expires_on=int(time.time()) + 3600)
+        now = self._clock.now() if self._clock is not None else time.time()
+        return AccessTokenInfo(token="abc", expires_on=int(now) + 3600)
 
     def close(self) -> None:
         return None
@@ -228,9 +255,10 @@ def test_bearer_token_policy_serializes_concurrent_refresh() -> None:
 class _SlowAsyncCredential:
     """AsyncTokenCredential whose token fetch is slow — for asyncio concurrency."""
 
-    def __init__(self, delay: float = 0.05) -> None:
+    def __init__(self, delay: float = 0.05, clock: FakeClock | None = None) -> None:
         self.calls = 0
         self._delay = delay
+        self._clock = clock
 
     async def get_token_info(
         self,
@@ -240,7 +268,8 @@ class _SlowAsyncCredential:
         del scopes, options
         self.calls += 1
         await asyncio.sleep(self._delay)
-        return AccessTokenInfo(token="abc", expires_on=int(time.time()) + 3600)
+        now = self._clock.now() if self._clock is not None else time.time()
+        return AccessTokenInfo(token="abc", expires_on=int(now) + 3600)
 
     async def close(self) -> None:
         return None

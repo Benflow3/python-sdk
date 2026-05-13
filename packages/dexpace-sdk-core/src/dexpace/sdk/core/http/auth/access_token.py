@@ -6,6 +6,8 @@ import time
 from dataclasses import dataclass
 from typing import TypedDict
 
+from ...util.clock import SYSTEM_CLOCK, AsyncClock, Clock
+
 
 class TokenRequestOptions(TypedDict, total=False):
     """Optional per-request overrides forwarded to a ``TokenCredential``.
@@ -46,19 +48,34 @@ class AccessTokenInfo:
         """Return ``True`` when the token's ``expires_on`` is in the past."""
         return (now if now is not None else time.time()) >= self.expires_on
 
-    def needs_refresh(self, *, now: float | None = None, leeway_seconds: int = 300) -> bool:
+    def needs_refresh(
+        self,
+        *,
+        now: float | None = None,
+        leeway_seconds: int = 300,
+        clock: Clock | AsyncClock | None = None,
+    ) -> bool:
         """Return ``True`` when the token is close to (or past) expiry.
 
         Args:
-            now: Reference time (Unix seconds); defaults to ``time.time()``.
+            now: Reference time (Unix seconds). When provided, takes
+                precedence over ``clock``. Defaults to ``None``.
             leeway_seconds: Refresh when token expires within this many
                 seconds (default 5 minutes).
+            clock: Optional ``Clock`` (or ``AsyncClock``) used as the
+                time source when ``now`` is not supplied. Defaults to
+                :data:`~dexpace.sdk.core.util.clock.SYSTEM_CLOCK`.
+                ``expires_on`` is wall-clock, so ``clock.now()`` (not
+                ``monotonic()``) is consulted. ``AsyncClock`` is accepted
+                because its ``now()`` method is synchronous — only
+                ``sleep`` differs between the two protocols, and this
+                helper does not sleep.
 
         Returns:
             ``True`` when either ``refresh_on`` has passed or
             ``expires_on - leeway_seconds`` has passed.
         """
-        current = now if now is not None else time.time()
+        current = now if now is not None else (clock if clock is not None else SYSTEM_CLOCK).now()
         if self.refresh_on is not None and current >= self.refresh_on:
             return True
         return current >= (self.expires_on - leeway_seconds)
