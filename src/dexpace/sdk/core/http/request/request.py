@@ -23,8 +23,9 @@ class Request:
     Construct directly via the dataclass constructor or derive a new instance
     non-destructively via :func:`dataclasses.replace` or the ``with_*`` helpers.
 
-    Frozen dataclass — instances are safe to share across threads. The ``body``,
-    when present, may carry single-use stream state; see :class:`RequestBody`.
+    Header / metadata surface is immutable and safe to share across threads;
+    the ``body``, when present, carries single-use stream state — clone before
+    sharing if you retain a stream-backed body. See :class:`RequestBody`.
     """
 
     method: Method
