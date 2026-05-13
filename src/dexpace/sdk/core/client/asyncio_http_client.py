@@ -12,6 +12,20 @@ The implementation handles only:
 - ``Content-Length``-framed responses (no chunked transfer-encoding)
 - Connection: close (one request per connection)
 
+Additional limitations that mirror :mod:`urllib_http_client`:
+
+- **No streaming uploads.** The request body is fully buffered into memory
+  via ``b"".join(request.body.iter_bytes())`` before send. For streaming
+  uploads, plug in an alternative transport (``httpx``, ``aiohttp``).
+- **Coarse timeouts.** A single ``timeout`` value is applied to connect,
+  status-line read, header read, and body read. Production transports
+  expose per-phase granularity.
+- **Multi-value request headers are emitted as repeated lines** (one
+  ``Name: Value`` line per value), which is the wire-correct form on the
+  async side — note this differs from the urllib reference client, which
+  flattens to ``", "``-joined values because ``urllib.request.Request``
+  only accepts ``Mapping[str, str]``.
+
 These limits keep the reference implementation small enough to verify by
 inspection. For anything else, plug in a proper adapter.
 """
@@ -44,8 +58,13 @@ _CRLF: Final[bytes] = b"\r\n"
 class AsyncioHttpClient:
     """Reference async HTTP/1.1 client.
 
+    See the module docstring for the full list of limitations (no streaming
+    uploads, coarse single-phase timeout, etc).
+
     Attributes:
-        timeout: Connect/read timeout in seconds.
+        timeout: Single timeout in seconds applied to every I/O phase
+            (connect, status-line read, header read, body read). No
+            per-phase granularity.
         ssl_context: Optional pre-built ``SSLContext`` for ``https://``.
             Defaults to ``ssl.create_default_context()`` on first use.
     """

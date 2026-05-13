@@ -4,10 +4,28 @@ Not for production traffic — it is the example/test transport that ships
 with ``core``. Production deployments should plug in an adapter built on a
 real HTTP library (httpx, requests, aiohttp) instead.
 
-Honours :class:`RequestBody`'s ``iter_bytes`` for outbound payloads and
-exposes the response body as a :class:`ResponseBody.from_stream` wrapper so
-streaming reads are possible. Maps urllib's exception types into the SDK
-error hierarchy.
+Limitations of the underlying ``urllib.request`` transport:
+
+- **No streaming uploads.** The request body is fully buffered into memory
+  via ``b"".join(request.body.iter_bytes())`` before send — ``urllib.request``
+  does not support chunked transfer-encoding for outbound payloads. For
+  streaming uploads, plug in an alternative transport (``httpx``,
+  ``aiohttp``, ``requests`` with ``stream=True`` semantics).
+- **Coarse timeouts.** A single ``timeout`` value covers both connection
+  establishment and read; ``urllib.request`` offers no separate
+  connect/read/write granularity. Production transports (``httpx``,
+  ``aiohttp``) expose per-phase timeouts.
+- **Multi-value request headers are flattened.** ``urllib.request.Request``
+  accepts only a ``Mapping[str, str]``, so multiple values for the same
+  header name are joined with ``", "``. This is correct for most list-typed
+  headers (``Accept``, ``Cache-Control``) but wire-incorrect for headers
+  that legitimately repeat — notably ``Set-Cookie`` (not applicable on
+  outbound) and, in proxy/forwarder scenarios, ``WWW-Authenticate``. Use a
+  production transport if you need to emit repeated outbound headers.
+
+The response body is exposed as a :class:`ResponseBody.from_stream` wrapper
+so streaming reads on the response side are possible. Maps urllib's
+exception types into the SDK error hierarchy.
 """
 
 from __future__ import annotations
@@ -44,8 +62,13 @@ class UrllibHttpClient:
     call, streams the response into a buffered ``ResponseBody``, and maps
     urllib failure modes into the SDK error hierarchy.
 
+    See the module docstring for the full list of underlying ``urllib``
+    limitations (no streaming uploads, coarse timeouts, multi-value
+    request-header flattening).
+
     Attributes:
-        timeout: Connect/read timeout in seconds applied to ``urlopen``.
+        timeout: Single timeout in seconds applied to ``urlopen``; covers
+            both connect and read with no per-phase granularity.
     """
 
     __slots__ = ("_closed", "timeout")
@@ -102,9 +125,10 @@ def _build_urllib_request(request: Request) -> _UrllibRequest:
         body_bytes = b"".join(request.body.iter_bytes())
     # ``urllib.request.Request`` accepts a ``Mapping[str, str]`` only, so
     # multi-value headers are joined into a single comma-separated string
-    # rather than dropped. ``Set-Cookie`` is the one header where comma
-    # joining is wire-incorrect; outbound requests don't carry Set-Cookie
-    # so the simple join is safe here.
+    # rather than dropped. Safe for most list-typed headers (``Accept``,
+    # ``Cache-Control``); wire-incorrect for headers that legitimately
+    # repeat (``Set-Cookie`` — not applicable on outbound; ``WWW-Authenticate``
+    # in proxy/forwarder scenarios). See module docstring.
     headers = {name: ", ".join(values) for name, values in request.headers.items()}
     return _UrllibRequest(
         url=request.url.wire_form(),
