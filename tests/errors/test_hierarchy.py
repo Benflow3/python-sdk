@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import assert_type
+
 import pytest
 
 from dexpace.sdk.core.errors import (
@@ -109,6 +112,41 @@ def test_pipeline_aborted_error_is_sdk_error() -> None:
 
 def test_decode_error_extends_http_response_error() -> None:
     assert issubclass(DecodeError, HttpResponseError)
+
+
+@dataclass(frozen=True, slots=True)
+class _ErrorPayload:
+    """Toy error-body schema used to exercise the generic ``model`` field."""
+
+    code: str
+    message: str
+
+
+def test_http_response_error_model_defaults_to_none() -> None:
+    err = HttpResponseError(response=_response(Status.BAD_REQUEST))
+    assert err.model is None
+
+
+def test_http_response_error_carries_typed_model_payload() -> None:
+    payload = _ErrorPayload(code="E001", message="bad input")
+    err: HttpResponseError[_ErrorPayload] = HttpResponseError(
+        response=_response(Status.BAD_REQUEST),
+        model=payload,
+    )
+    assert err.model is payload
+    # The real value here is mypy inference: ``err.model`` is typed as
+    # ``_ErrorPayload | None`` so attribute access is narrowed below.
+    assert err.model is not None
+    assert err.model.code == "E001"
+    assert_type(err.model, _ErrorPayload)
+
+
+def test_unparametrised_http_response_error_model_is_any() -> None:
+    # Unparametrised construction defaults to ``HttpResponseError[Any]``
+    # under PEP 696 so the historical ``Any``-typed ``model`` field still
+    # works without an explicit type argument.
+    err = HttpResponseError(response=_response(Status.BAD_REQUEST), model=object())
+    assert err.model is not None
 
 
 class TestMapError:

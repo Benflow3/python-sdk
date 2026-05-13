@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from .base import SdkError
 
@@ -13,13 +13,30 @@ if TYPE_CHECKING:
 
     type _AnyResponse = Response | AsyncResponse
 
+    # PEP 696 type-parameter defaults are accepted by mypy under
+    # ``python_version = "3.12"`` from the typing stub but the runtime
+    # ``typing.TypeVar`` only grew the ``default`` kwarg in 3.13. Declare
+    # the default only when type-checking so the source still imports on
+    # 3.12 while ``HttpResponseError`` (unparametrised) keeps its historical
+    # ``HttpResponseError[Any]`` meaning for downstream type-checkers.
+    ModelT = TypeVar("ModelT", default=Any)
+else:
+    ModelT = TypeVar("ModelT")
 
-class HttpResponseError(SdkError):
+
+# UP046 wants PEP 695 ``class Foo[T = Any](...)`` form, but that syntax
+# requires Python 3.13+ at runtime; we still support 3.12.
+class HttpResponseError(SdkError, Generic[ModelT]):  # noqa: UP046
     """A 4xx or 5xx HTTP response was received intact.
 
     Carries the response so callers can inspect status, headers, and body.
     The body is not pre-buffered — callers should ``read()`` it before the
     response goes out of scope if they need the content.
+
+    Generic over ``ModelT`` — the deserialised body payload type. Defaults
+    to ``Any`` for unparametrised use so existing callers keep their loose
+    typing; consumers that always decode a known schema can write
+    ``HttpResponseError[MyModel]`` to get a typed ``model`` attribute.
 
     Attributes:
         status: HTTP status code (``Status`` enum value, ``None`` if
@@ -27,13 +44,14 @@ class HttpResponseError(SdkError):
         reason: HTTP reason phrase (``None`` if no response was captured).
         response: The full response object, for inspection.
         model: Optional deserialised body payload (set by consumer
-            libraries when they parse the error body).
+            libraries when they parse the error body). Typed as
+            ``ModelT | None``.
     """
 
     status: Status | None
     reason: str | None
     response: _AnyResponse | None
-    model: Any
+    model: ModelT | None
 
     def __init__(
         self,
@@ -61,30 +79,30 @@ class HttpResponseError(SdkError):
         super().__init__(message, **kwargs)
 
 
-class DecodeError(HttpResponseError):
+class DecodeError(HttpResponseError[ModelT]):
     """The response body could not be decoded as the expected format."""
 
 
-class ResourceExistsError(HttpResponseError):
+class ResourceExistsError(HttpResponseError[ModelT]):
     """The target resource already exists (typically 409 Conflict)."""
 
 
-class ResourceNotFoundError(HttpResponseError):
+class ResourceNotFoundError(HttpResponseError[ModelT]):
     """The target resource does not exist (typically 404 Not Found)."""
 
 
-class ResourceModifiedError(HttpResponseError):
+class ResourceModifiedError(HttpResponseError[ModelT]):
     """The target resource was modified since a precondition was evaluated.
 
     Typically raised for 412 Precondition Failed on a write operation.
     """
 
 
-class ResourceNotModifiedError(HttpResponseError):
+class ResourceNotModifiedError(HttpResponseError[ModelT]):
     """The target resource was not modified (304 Not Modified)."""
 
 
-class ClientAuthenticationError(HttpResponseError):
+class ClientAuthenticationError(HttpResponseError[ModelT]):
     """Authentication failed (401) or was refused (403).
 
     Bearer-token policies short-circuit retry on this error — the request
