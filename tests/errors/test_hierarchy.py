@@ -54,6 +54,11 @@ def test_continuation_token_propagates() -> None:
     assert err.continuation_token == "next-page-3"
 
 
+def test_sdk_error_rejects_extra_positional_args() -> None:
+    with pytest.raises(TypeError):
+        SdkError("msg", "extra")  # type: ignore[misc,arg-type]
+
+
 def test_http_response_error_carries_status_and_response() -> None:
     response = _response(Status.NOT_FOUND)
     err = HttpResponseError(response=response)

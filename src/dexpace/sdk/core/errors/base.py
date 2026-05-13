@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import sys
 from types import TracebackType
-from typing import Any
 
 
 class SdkError(Exception):
@@ -35,7 +34,7 @@ class SdkError(Exception):
     def __init__(
         self,
         message: object = "",
-        *args: Any,
+        *,
         error: BaseException | None = None,
         continuation_token: str | None = None,
     ) -> None:
@@ -43,7 +42,6 @@ class SdkError(Exception):
 
         Args:
             message: Human-readable description (stringified by ``__init__``).
-            *args: Forwarded to ``Exception.__init__``.
             error: Optional underlying cause.
             continuation_token: Optional pager continuation token.
         """
@@ -54,7 +52,7 @@ class SdkError(Exception):
         self.exc_traceback = exc_info[2]
         self.message = str(message)
         self.continuation_token = continuation_token
-        super().__init__(self.message, *args)
+        super().__init__(self.message)
 
 
 class ServiceRequestError(SdkError):
