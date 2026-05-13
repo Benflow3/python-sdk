@@ -12,6 +12,8 @@ from ...pipeline.policy import Policy
 from ...pipeline.stage import Stage
 from ...util.clock import ASYNC_SYSTEM_CLOCK, SYSTEM_CLOCK, AsyncClock, Clock
 from .access_token import AccessTokenInfo, TokenRequestOptions
+from .challenge import parse_challenges
+from .challenge_handler import ChallengeHandler
 from .credentials import (
     AsyncTokenCredential,
     BasicAuthCredential,
@@ -91,11 +93,23 @@ class BearerTokenPolicy(Policy):
     at most once per refresh window even under heavy concurrent send pressure.
 
     The ``on_challenge`` hook is a no-op by default; subclasses override it
-    to handle CAE/claims challenges.
+    to handle CAE/claims challenges. Alternatively, callers can pass a
+    ``challenge_handler`` to plug in a scheme-aware handler (e.g.
+    ``DigestChallengeHandler``); the handler is consulted before
+    ``on_challenge`` on 401/407 and, if it satisfies the challenge, the
+    returned ``(name, value)`` pair is stamped on the retried request.
     """
 
     STAGE = Stage.AUTH
-    __slots__ = ("_audience", "_cache", "_clock", "_credential", "_lock", "_scopes")
+    __slots__ = (
+        "_audience",
+        "_cache",
+        "_challenge_handler",
+        "_clock",
+        "_credential",
+        "_lock",
+        "_scopes",
+    )
 
     def __init__(
         self,
@@ -104,6 +118,7 @@ class BearerTokenPolicy(Policy):
         cache: TokenCache | None = None,
         audience: str | None = None,
         clock: Clock | None = None,
+        challenge_handler: ChallengeHandler | None = None,
     ) -> None:
         if not scopes:
             raise ValueError("at least one scope is required")
@@ -113,20 +128,64 @@ class BearerTokenPolicy(Policy):
         self._audience = audience
         self._clock: Clock = clock if clock is not None else SYSTEM_CLOCK
         self._lock = threading.Lock()
+        self._challenge_handler = challenge_handler
 
     def send(self, request: Request, ctx: PipelineContext) -> Response:
         request = self._authorize(request, ctx)
         response = self.next.send(request, ctx)
-        if int(response.status) != 401:
+        status = int(response.status)
+        if status not in (401, 407):
             return response
-        # Drop cached token and ask subclasses to handle the challenge.
-        self._cache.set(self._scopes, _expired_token(), self._audience)
+        # On 401 the bearer token was rejected: drop it from the cache so the
+        # ``on_challenge`` fallback path forces a refresh. A 407 means the
+        # proxy rejected us, not the origin — leave the cached token alone.
+        if status == 401:
+            self._cache.set(self._scopes, _expired_token(), self._audience)
+        handler_header = self._apply_challenge_handler(request, response, status)
+        if handler_header is not None:
+            request = request.with_header(*handler_header)
+            response = self.next.send(request, ctx)
+            if int(response.status) not in (401, 407):
+                return response
+            raise ClientAuthenticationError(response=response)
+        if status != 401:
+            # No handler match on a 407; surface the response unchanged so
+            # callers can inspect proxy-auth failures themselves.
+            return response
         if "WWW-Authenticate" in response.headers and self.on_challenge(request, response):
             request = self._authorize(request, ctx, force_refresh=True)
             response = self.next.send(request, ctx)
             if int(response.status) != 401:
                 return response
         raise ClientAuthenticationError(response=response)
+
+    def _apply_challenge_handler(
+        self,
+        request: Request,
+        response: Response,
+        status: int,
+    ) -> tuple[str, str] | None:
+        """Delegate to the configured ``ChallengeHandler``, if any.
+
+        Returns the ``(name, value)`` pair to stamp on the retry, or ``None``
+        when no handler is configured or the handler declines the challenge.
+        """
+        if self._challenge_handler is None:
+            return None
+        is_proxy = status == 407
+        header_name = "Proxy-Authenticate" if is_proxy else "WWW-Authenticate"
+        raw = response.headers.get(header_name)
+        if raw is None:
+            return None
+        challenges = parse_challenges(raw)
+        if not challenges or not self._challenge_handler.can_handle(challenges):
+            return None
+        return self._challenge_handler.handle(
+            request.method,
+            request.url,
+            challenges,
+            is_proxy=is_proxy,
+        )
 
     def on_challenge(self, request: Request, response: Response) -> bool:
         """Override to handle a ``WWW-Authenticate`` challenge.

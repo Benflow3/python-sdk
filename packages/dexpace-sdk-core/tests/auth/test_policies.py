@@ -14,9 +14,11 @@ from dexpace.sdk.core.errors import ClientAuthenticationError, ServiceRequestErr
 from dexpace.sdk.core.http.auth import (
     AccessTokenInfo,
     AsyncBearerTokenPolicy,
+    AuthenticateChallenge,
     BasicAuthCredential,
     BasicAuthPolicy,
     BearerTokenPolicy,
+    DigestChallengeHandler,
     KeyCredential,
     KeyCredentialPolicy,
 )
@@ -303,3 +305,116 @@ async def test_async_bearer_token_policy_serializes_concurrent_refresh() -> None
         await asyncio.gather(*(p.run(_request(), DispatchContext(_instr(t))) for t in trace_ids))
 
     assert cred.calls == 1
+
+
+class _ScriptedClient(HttpClient):
+    """Captures requests and replies with a scripted sequence of responses.
+
+    Each call consumes the next ``(status, www_authenticate)`` entry from the
+    queue. The final entry is reused if the queue runs dry.
+    """
+
+    def __init__(self, script: list[tuple[Status, str | None]]) -> None:
+        if not script:
+            raise ValueError("script must not be empty")
+        self._script = script
+        self.calls: list[Request] = []
+        self._index = 0
+
+    def execute(self, request: Request) -> Response:
+        self.calls.append(request)
+        idx = min(self._index, len(self._script) - 1)
+        self._index += 1
+        status, www_auth = self._script[idx]
+        from dexpace.sdk.core.http.common import Headers
+
+        header_pairs: list[tuple[str, str]] = []
+        if www_auth is not None:
+            header_pairs.append(("WWW-Authenticate", www_auth))
+        return Response(
+            request=request,
+            protocol=Protocol.HTTP_1_1,
+            status=status,
+            headers=Headers(header_pairs),
+        )
+
+
+def test_challenge_handler_wires_digest_authentication() -> None:
+    """Digest handler plugged into BearerTokenPolicy negotiates a 401 Digest."""
+
+    digest_challenge = (
+        'Digest realm="testrealm@host.com", '
+        'qop="auth", '
+        'nonce="dcd98b7102dd2f0e8b11d0f600bfb0c093", '
+        'opaque="5ccc069c403ebaf9f0171e9517f40e41", '
+        "algorithm=MD5"
+    )
+    client = _ScriptedClient(
+        [
+            (Status.UNAUTHORIZED, digest_challenge),
+            (Status.OK, None),
+        ]
+    )
+    cred = _StaticCredential()
+    handler = DigestChallengeHandler(
+        "Mufasa",
+        "Circle Of Life",
+        cnonce_factory=lambda: "0a4f113b",
+    )
+    policy = BearerTokenPolicy(cred, "scope-a", challenge_handler=handler)
+    with Pipeline(client, policies=[policy]) as p:
+        p.run(_request(), DispatchContext(_instr("0" * 16 + "c")))
+
+    assert len(client.calls) == 2
+    auth = client.calls[1].headers.get("authorization")
+    assert auth is not None
+    assert auth.startswith("Digest ")
+    assert 'username="Mufasa"' in auth
+    assert 'realm="testrealm@host.com"' in auth
+    assert "algorithm=MD5" in auth
+
+
+def test_challenge_handler_can_handle_false_falls_through() -> None:
+    """Handler that does not recognise the challenge falls back to on_challenge."""
+
+    class _NoopHandler:
+        def __init__(self) -> None:
+            self.can_handle_calls = 0
+            self.handle_calls = 0
+
+        def can_handle(self, challenges: list[AuthenticateChallenge]) -> bool:
+            del challenges
+            self.can_handle_calls += 1
+            return False
+
+        def handle(
+            self,
+            method: Method,
+            url: Url,
+            challenges: list[AuthenticateChallenge],
+            *,
+            is_proxy: bool,
+        ) -> tuple[str, str] | None:
+            del method, url, challenges, is_proxy
+            self.handle_calls += 1
+            return None
+
+    client = _CapturingClient(status=Status.UNAUTHORIZED, www_auth=True)
+    cred = _StaticCredential()
+    handler = _NoopHandler()
+
+    on_challenge_calls = 0
+
+    class _Spy(BearerTokenPolicy):
+        def on_challenge(self, request: Request, response: Response) -> bool:
+            nonlocal on_challenge_calls
+            on_challenge_calls += 1
+            return False
+
+    policy = _Spy(cred, "scope-a", challenge_handler=handler)
+    with Pipeline(client, policies=[policy]) as p, pytest.raises(ClientAuthenticationError):
+        p.run(_request(), DispatchContext(_instr("0" * 16 + "d")))
+
+    assert handler.can_handle_calls == 1
+    assert handler.handle_calls == 0
+    assert on_challenge_calls == 1
