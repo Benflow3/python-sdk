@@ -41,33 +41,84 @@ Python counterpart to [`dexpace/java-sdk`](https://github.com/dexpace/java-sdk).
 
 ## Project Structure
 
+The repo is a [`uv`](https://docs.astral.sh/uv/)-managed workspace. Each
+package under `packages/` is its own distribution; PEP 420 namespace
+packages let them share the `dexpace.sdk.*` prefix.
+
 ```
 python-sdk/
-  src/
-    dexpace/sdk/core/        Single package — all SDK core code
-      http/                  Request, Response, Headers, MediaType, Url, ETag, …
-      pipeline/              PipelineStep + step config
-      client/                HttpClient Protocol
-      serde/                 Serde, Serializer, Deserializer
-      instrumentation/       InstrumentationContext, Span, TracingScope (noops included)
-  tests/                     pytest suite
-  pyproject.toml
+  pyproject.toml             Workspace root (uv workspace, dev deps, lint/type config)
+  uv.lock
+  .github/workflows/ci.yml   pytest + mypy + ruff on Python 3.12 and 3.13
+  packages/
+    dexpace-sdk-core/        Zero-dependency toolkit (no transports)
+      src/dexpace/sdk/core/  http/, pipeline/, client/, serde/, errors/, instrumentation/
+      tests/
+    dexpace-sdk-http-stdlib/ Reference stdlib transports
+      src/dexpace/sdk/http/stdlib/
+                             UrllibHttpClient (sync) + AsyncioHttpClient (async)
+      tests/
 ```
+
+Planned follow-up adapter packages (not yet shipped):
+`dexpace-sdk-http-httpx`, `dexpace-sdk-http-aiohttp`,
+`dexpace-sdk-http-requests`. Pick the transport that matches your
+dependency constraints.
 
 ### Subpackages (`dexpace.sdk.core`)
 
-| Package                                                     | Description                                                                                       |
-|-------------------------------------------------------------|---------------------------------------------------------------------------------------------------|
-| [`http.request`](src/dexpace/sdk/core/http/request)         | Immutable `Request`, `RequestBody`, `FileRequestBody`, `LoggableRequestBody`, `Method`            |
-| [`http.response`](src/dexpace/sdk/core/http/response)       | Immutable `Response`, `ResponseBody`, `LoggableResponseBody`, `Status`                            |
-| [`http.common`](src/dexpace/sdk/core/http/common)           | `Headers`, `HttpHeaderName`, `MediaType`, `Protocol`, `Url`, `QueryParams`, `ETag`, `HttpRange`, `RequestConditions`, `common_media_types` |
-| [`http.context`](src/dexpace/sdk/core/http/context)         | `CallContext`, `DispatchContext`, `RequestContext`, `ExchangeContext`, `ContextStore`             |
-| [`pipeline`](src/dexpace/sdk/core/pipeline)                 | `PipelineStep`, `RequestPipelineStep`, `ResponsePipelineStep`, `StepMetadata`, `RetryConfig`      |
-| [`client`](src/dexpace/sdk/core/client)                     | `HttpClient` Protocol                                                                             |
-| [`serde`](src/dexpace/sdk/core/serde)                       | `Serde`, `Serializer`, `Deserializer` Protocols                                                   |
-| [`instrumentation`](src/dexpace/sdk/core/instrumentation)   | `InstrumentationContext`, `Span`, `Tracer`, `TracingScope`, noop singletons                       |
+| Package                                                                              | Description                                                                                       |
+|--------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------|
+| [`http.request`](packages/dexpace-sdk-core/src/dexpace/sdk/core/http/request)        | Immutable `Request`, `RequestBody`, `FileRequestBody`, `LoggableRequestBody`, `Method`            |
+| [`http.response`](packages/dexpace-sdk-core/src/dexpace/sdk/core/http/response)      | Immutable `Response`, `ResponseBody`, `LoggableResponseBody`, `Status`                            |
+| [`http.common`](packages/dexpace-sdk-core/src/dexpace/sdk/core/http/common)          | `Headers`, `HttpHeaderName`, `MediaType`, `Protocol`, `Url`, `QueryParams`, `ETag`, `HttpRange`, `RequestConditions`, `common_media_types` |
+| [`http.context`](packages/dexpace-sdk-core/src/dexpace/sdk/core/http/context)        | `CallContext`, `DispatchContext`, `RequestContext`, `ExchangeContext`, `ContextStore`             |
+| [`pipeline`](packages/dexpace-sdk-core/src/dexpace/sdk/core/pipeline)                | `PipelineStep`, `RequestPipelineStep`, `ResponsePipelineStep`, `StepMetadata`, `RetryConfig`      |
+| [`client`](packages/dexpace-sdk-core/src/dexpace/sdk/core/client)                    | `HttpClient` + `AsyncHttpClient` Protocols                                                        |
+| [`serde`](packages/dexpace-sdk-core/src/dexpace/sdk/core/serde)                      | `Serde`, `Serializer`, `Deserializer` Protocols                                                   |
+| [`instrumentation`](packages/dexpace-sdk-core/src/dexpace/sdk/core/instrumentation)  | `InstrumentationContext`, `Span`, `Tracer`, `TracingScope`, noop singletons                       |
 
 ## Quick Start
+
+### Installing the workspace
+
+```bash
+git clone https://github.com/dexpace/python-sdk.git
+cd python-sdk
+uv sync
+```
+
+`uv sync` provisions a virtualenv with `dexpace-sdk-core` and
+`dexpace-sdk-http-stdlib` installed in editable mode plus the dev tooling
+(`pytest`, `mypy`, `ruff`). All commands below run via `uv run …` so the
+workspace's pinned environment is used.
+
+### A minimal round trip
+
+The toolkit (`dexpace.sdk.core`) supplies the models and Protocols; a
+transport package (`dexpace.sdk.http.stdlib` here) plugs in the concrete
+`HttpClient`:
+
+```python
+from dexpace.sdk.core.http.common import Headers, common_media_types
+from dexpace.sdk.core.http.common.http_header_name import CONTENT_TYPE
+from dexpace.sdk.core.http.request import Method, Request, RequestBody
+from dexpace.sdk.http.stdlib import UrllibHttpClient
+
+request = Request(
+    method=Method.POST,
+    url="https://httpbin.org/post",
+    headers=Headers([(CONTENT_TYPE, "application/json")]),
+    body=RequestBody.from_string(
+        '{"hello": "world"}',
+        media_type=common_media_types.APPLICATION_JSON,
+    ),
+)
+
+client = UrllibHttpClient()
+with client.execute(request) as response:
+    print(response.status, response.body.string())
+```
 
 ### Building a request
 
@@ -201,12 +252,15 @@ Layered, bottom-up:
 ## Development
 
 ```bash
-pip install -e ".[dev]"
-ruff check src tests
-ruff format src tests
-mypy
-pytest
+uv sync                          # provision workspace + dev tools
+uv run pytest -q                 # run both packages' test suites
+uv run mypy --strict             # type-check
+uv run ruff check                # lint
+uv run ruff format --check       # formatting gate
 ```
+
+CI (`.github/workflows/ci.yml`) runs the same five commands on Python 3.12
+and 3.13 for every push and pull request.
 
 ## Tech Stack
 

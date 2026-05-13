@@ -67,27 +67,75 @@ bodies are modelled as typed Pythonic abstractions instead.
 
 ## Repository Layout
 
+The repo is a `uv`-managed workspace. Each member under `packages/` is its own
+distribution; PEP 420 namespace packages let them share the `dexpace.sdk.*`
+prefix. Commands run from the workspace root via `uv run …` — `uv sync`
+provisions the virtualenv with both packages installed in editable mode.
+
 ```
 python-sdk/
 ├── LICENSE.md
 ├── README.md
-├── pyproject.toml
-├── src/dexpace/sdk/core/
-│   ├── http/
-│   │   ├── common/              # Headers, HttpHeaderName, MediaType, Protocol, Url,
-│   │   │                        # QueryParams, ETag, HttpRange, RequestConditions,
-│   │   │                        # common_media_types
-│   │   ├── request/             # Request, RequestBody, FileRequestBody,
-│   │   │                        # LoggableRequestBody, Method
-│   │   ├── response/            # Response, ResponseBody, LoggableResponseBody, Status
-│   │   └── context/             # CallContext, DispatchContext, RequestContext,
-│   │                            # ExchangeContext, ContextStore
-│   ├── pipeline/
-│   │   └── step/                # PipelineStep, RetryableStep, StepMetadata, RetryConfig
-│   ├── client/                  # HttpClient Protocol
-│   ├── serde/                   # Serde, Serializer, Deserializer Protocols
-│   └── instrumentation/         # InstrumentationContext, Span, Tracer, TracingScope, noops
-└── tests/                       # pytest suite — io/, http/, context/, pipeline/
+├── CLAUDE.md
+├── pyproject.toml                          # workspace root (uv workspace, dev deps,
+│                                           # ruff/mypy/pytest config)
+├── uv.lock
+├── .github/workflows/ci.yml                # pytest + mypy + ruff on 3.12 and 3.13
+├── docs/                                   # cross-package documentation
+└── packages/
+    ├── dexpace-sdk-core/                   # zero-dependency toolkit (no transports)
+    │   ├── pyproject.toml
+    │   ├── README.md
+    │   ├── src/dexpace/sdk/core/
+    │   │   ├── http/
+    │   │   │   ├── common/                 # Headers, HttpHeaderName, MediaType,
+    │   │   │   │                           # Protocol, Url, QueryParams, ETag,
+    │   │   │   │                           # HttpRange, RequestConditions,
+    │   │   │   │                           # common_media_types
+    │   │   │   ├── request/                # Request, RequestBody, FileRequestBody,
+    │   │   │   │                           # LoggableRequestBody, Method
+    │   │   │   ├── response/               # Response, ResponseBody,
+    │   │   │   │                           # LoggableResponseBody, Status
+    │   │   │   ├── context/                # CallContext, DispatchContext,
+    │   │   │   │                           # RequestContext, ExchangeContext,
+    │   │   │   │                           # ContextStore
+    │   │   │   └── auth/                   # Credential, BearerTokenPolicy,
+    │   │   │                               # BasicAuthPolicy, KeyCredentialPolicy
+    │   │   ├── pipeline/                   # Pipeline, Policy ABC, RetryPolicy,
+    │   │   │                               # LoggingPolicy, TracingPolicy, async twins
+    │   │   ├── client/                     # HttpClient + AsyncHttpClient Protocols
+    │   │   ├── serde/                      # Serde, Serializer, Deserializer Protocols
+    │   │   ├── errors/                     # SDK-level exception hierarchy
+    │   │   └── instrumentation/            # InstrumentationContext, Span, Tracer,
+    │   │                                   # TracingScope, noops
+    │   └── tests/                          # pytest suite — http/, context/,
+    │                                       # pipeline/, auth/, serde/, sse/, errors/,
+    │                                       # instrumentation/
+    └── dexpace-sdk-http-stdlib/            # reference stdlib transports
+        ├── pyproject.toml                  # depends on dexpace-sdk-core
+        ├── README.md
+        ├── src/dexpace/sdk/http/stdlib/
+        │   ├── urllib_http_client.py       # UrllibHttpClient (sync, blocking)
+        │   └── asyncio_http_client.py      # AsyncioHttpClient (async, stdlib only)
+        └── tests/
+```
+
+Planned follow-up packages (not yet present): `dexpace-sdk-http-httpx`,
+`dexpace-sdk-http-aiohttp`, `dexpace-sdk-http-requests`. Each will live under
+`packages/` as a separate distribution, depend on `dexpace-sdk-core`, and
+adapt its third-party HTTP library to the `HttpClient` / `AsyncHttpClient`
+Protocols. Namespace packaging (no `__init__.py` at `src/dexpace/`,
+`src/dexpace/sdk/`, or `src/dexpace/sdk/http/`) is mandatory for every
+package so the `dexpace.sdk` prefix stays shared.
+
+### Common commands (run from the workspace root)
+
+```bash
+uv sync                          # install workspace + dev tools
+uv run pytest -q                 # walk both packages' test suites
+uv run mypy --strict             # type-check everything in `files = [...]`
+uv run ruff check                # lint
+uv run ruff format --check       # formatting gate
 ```
 
 ## Architecture — Big Picture
@@ -143,6 +191,7 @@ Layered, bottom-up:
 - The Java SDK's `Io`/`IoProvider` seam intentionally does NOT exist here.
   Python's stdlib (`bytes`, `bytearray`, `memoryview`, `BytesIO`,
   `BinaryIO`) is the contract. Don't reintroduce an Okio-style layer.
-- `mypy` is invoked as `python3 -m mypy` (config in `pyproject.toml`).
-  `python_version = "3.12"` because mypy 2.x requires it; the source still
-  runs on whatever interpreter ≥ 3.12. Don't lower the floor.
+- `mypy` is invoked as `uv run mypy --strict` from the workspace root (config
+  in the root `pyproject.toml`). `python_version = "3.12"` because mypy 2.x
+  requires it; the source still runs on whatever interpreter ≥ 3.12. Don't
+  lower the floor.
