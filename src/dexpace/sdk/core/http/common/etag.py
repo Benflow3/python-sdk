@@ -11,12 +11,31 @@ class ETag:
     """An HTTP entity tag (RFC 7232 §2.3).
 
     The opaque ``value`` does NOT include the surrounding double quotes;
-    ``__str__`` re-adds them on serialization. The ``weak`` flag determines
-    whether the tag is emitted with the ``W/`` prefix and governs whether
-    two ETags are considered weakly or strongly equivalent.
+    ``__str__`` re-adds them on serialization. An empty ``value`` is
+    rejected by ``parse`` — the wire form ``""`` carries no useful
+    validator information.
+
+    RFC 7232 distinguishes two validator strengths:
+
+    - **Strong validators** (``weak=False``, wire form ``"abc"``) signal
+      that two representations with the same tag are byte-identical. They
+      may be used for any conditional request, including range requests
+      (``If-Match`` / ``If-Range``).
+    - **Weak validators** (``weak=True``, wire form ``W/"abc"``) signal
+      only semantic equivalence — the resource is "good enough" the same
+      but may differ byte-for-byte (e.g. compressed vs uncompressed
+      payloads, or content negotiated on insignificant headers). Weak
+      tags are valid for ``If-None-Match`` cache revalidation but MUST
+      NOT be used with ``If-Range`` for partial-content requests.
+
+    Use ``matches_strong`` for strong comparison (both sides must be
+    strong) and ``matches_weak`` for weak comparison (the ``weak`` flag
+    is ignored on either side). See RFC 7232 §2.3.2 for the comparison
+    rules.
 
     Attributes:
-        value: The opaque entity-tag bytes (no quotes).
+        value: The opaque entity-tag bytes (no quotes). Must be non-empty
+            when constructed via ``parse``.
         weak: When ``True``, emit and compare as a weak validator.
     """
 
@@ -61,7 +80,8 @@ class ETag:
             The parsed ETag.
 
         Raises:
-            ValueError: If ``raw`` is not a valid quoted entity-tag.
+            ValueError: If ``raw`` is not a valid quoted entity-tag, or
+                if the quoted body is empty.
         """
         text = raw.strip()
         weak = False
@@ -70,7 +90,10 @@ class ETag:
             text = text[2:]
         if len(text) < 2 or text[0] != '"' or text[-1] != '"':
             raise ValueError(f"Invalid ETag: {raw!r}")
-        return cls(value=text[1:-1], weak=weak)
+        value = text[1:-1]
+        if not value:
+            raise ValueError(f"Invalid ETag: empty quoted body in {raw!r}")
+        return cls(value=value, weak=weak)
 
 
 __all__ = ["ETag"]

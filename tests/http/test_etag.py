@@ -36,6 +36,23 @@ def test_parse_unquoted_raises() -> None:
         ETag.parse("no-quotes")
 
 
+def test_parse_empty_strong_etag_raises() -> None:
+    with pytest.raises(ValueError, match="empty"):
+        ETag.parse('""')
+
+
+def test_parse_empty_weak_etag_raises() -> None:
+    with pytest.raises(ValueError, match="empty"):
+        ETag.parse('W/""')
+
+
+def test_parse_non_empty_round_trips() -> None:
+    strong = ETag(value="abc123")
+    weak = ETag(value="abc123", weak=True)
+    assert ETag.parse(str(strong)) == strong
+    assert ETag.parse(str(weak)) == weak
+
+
 def test_strong_comparison() -> None:
     a = ETag(value="x")
     b = ETag(value="x")
