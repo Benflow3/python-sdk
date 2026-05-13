@@ -1,0 +1,156 @@
+"""Async twin of :class:`StagedPipelineBuilder`.
+
+Behaviour mirrors the sync builder exactly: pillar enforcement, surgical
+edits, ``from_pipeline`` round-trip. The only differences are the policy
+types (``AsyncPolicy`` instead of ``Policy``) and the produced pipeline
+(``AsyncPipeline`` instead of ``Pipeline``).
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Self
+
+from .async_pipeline import AsyncPipeline
+from .async_policy import AsyncPolicy
+from .stage import Stage
+
+if TYPE_CHECKING:
+    from ..client.async_http_client import AsyncHttpClient
+
+
+class AsyncStagedPipelineBuilder:
+    """Build an :class:`AsyncPipeline` by stage rather than user-specified order.
+
+    See :class:`StagedPipelineBuilder` for the full behaviour; this is the
+    async counterpart.
+    """
+
+    __slots__ = ("_buckets", "_client", "_pillars")
+
+    def __init__(self, client: AsyncHttpClient) -> None:
+        self._client = client
+        self._pillars: dict[Stage, AsyncPolicy] = {}
+        self._buckets: dict[Stage, list[AsyncPolicy]] = {}
+
+    def append(self, policy: AsyncPolicy, *, force: bool = False) -> Self:
+        """Append ``policy`` to the tail of its stage's bucket."""
+        stage = policy.STAGE
+        if stage.is_pillar:
+            self._install_pillar(policy, stage, force=force)
+        else:
+            self._buckets.setdefault(stage, []).append(policy)
+        return self
+
+    def prepend(self, policy: AsyncPolicy, *, force: bool = False) -> Self:
+        """Prepend ``policy`` to the head of its stage's bucket."""
+        stage = policy.STAGE
+        if stage.is_pillar:
+            self._install_pillar(policy, stage, force=force)
+        else:
+            self._buckets.setdefault(stage, []).insert(0, policy)
+        return self
+
+    def replace(self, target: type[AsyncPolicy], new: AsyncPolicy) -> Self:
+        """Replace the first instance of ``target`` with ``new``."""
+        for stage, pillar in self._pillars.items():
+            if isinstance(pillar, target):
+                del self._pillars[stage]
+                self.append(new, force=True)
+                return self
+        for stage, bucket in self._buckets.items():
+            for i, p in enumerate(bucket):
+                if isinstance(p, target):
+                    if stage == new.STAGE:
+                        bucket[i] = new
+                    else:
+                        del bucket[i]
+                        self.append(new)
+                    return self
+        raise ValueError(f"No instance of {target.__name__} in the builder.")
+
+    def insert_after(self, target: type[AsyncPolicy], new: AsyncPolicy) -> Self:
+        """Insert ``new`` immediately after the first ``target`` instance."""
+        return self._splice(target, new, offset=1)
+
+    def insert_before(self, target: type[AsyncPolicy], new: AsyncPolicy) -> Self:
+        """Insert ``new`` immediately before the first ``target`` instance."""
+        return self._splice(target, new, offset=0)
+
+    def remove(self, target: type[AsyncPolicy]) -> Self:
+        """Remove every instance of ``target`` from the builder."""
+        self._pillars = {s: p for s, p in self._pillars.items() if not isinstance(p, target)}
+        for stage in list(self._buckets):
+            self._buckets[stage] = [p for p in self._buckets[stage] if not isinstance(p, target)]
+            if not self._buckets[stage]:
+                del self._buckets[stage]
+        return self
+
+    def build(self) -> AsyncPipeline:
+        """Flatten the builder's contents into an :class:`AsyncPipeline`."""
+        return AsyncPipeline(self._client, policies=self._flatten())
+
+    @classmethod
+    def from_pipeline(cls, pipeline: AsyncPipeline) -> Self:
+        """Seed a builder from an existing :class:`AsyncPipeline`."""
+        from ._async_transport_runner import _AsyncTransportRunner
+
+        builder = cls(pipeline.transport)
+        chain: list[AsyncPolicy] = []
+        node: AsyncPolicy | None = pipeline._chain
+        while node is not None and not isinstance(node, _AsyncTransportRunner):
+            chain.append(node)
+            node = getattr(node, "next", None)
+        last_stage: Stage | None = None
+        for policy in chain:
+            if last_stage is not None and last_stage > policy.STAGE:
+                raise ValueError(
+                    f"AsyncPipeline policy {type(policy).__name__} at stage {policy.STAGE} "
+                    f"comes after stage {last_stage}; staged builder requires "
+                    f"non-decreasing stage order. Use the list constructor instead."
+                )
+            last_stage = policy.STAGE
+            builder.append(policy, force=True)
+        return builder
+
+    def _install_pillar(self, policy: AsyncPolicy, stage: Stage, *, force: bool) -> None:
+        if stage in self._pillars and not force:
+            existing = type(self._pillars[stage]).__name__
+            raise ValueError(
+                f"Pillar stage {stage.name} is already filled by {existing}. "
+                f"Use replace({type(policy).__name__}, new) to swap, or "
+                f"force=True to overwrite."
+            )
+        self._pillars[stage] = policy
+
+    def _splice(self, target: type[AsyncPolicy], new: AsyncPolicy, *, offset: int) -> Self:
+        flat = self._flatten()
+        for i, p in enumerate(flat):
+            if isinstance(p, target):
+                flat.insert(i + offset, new)
+                self._reload(flat)
+                return self
+        raise ValueError(f"No instance of {target.__name__} in the builder.")
+
+    def _flatten(self) -> list[AsyncPolicy]:
+        out: list[AsyncPolicy] = []
+        for stage in Stage:
+            if stage is Stage.SEND:
+                continue
+            if stage.is_pillar:
+                if stage in self._pillars:
+                    out.append(self._pillars[stage])
+            else:
+                out.extend(self._buckets.get(stage, ()))
+        return out
+
+    def _reload(self, policies: list[AsyncPolicy]) -> None:
+        self._pillars.clear()
+        self._buckets.clear()
+        for p in policies:
+            if p.STAGE.is_pillar:
+                self._pillars[p.STAGE] = p
+            else:
+                self._buckets.setdefault(p.STAGE, []).append(p)
+
+
+__all__ = ["AsyncStagedPipelineBuilder"]

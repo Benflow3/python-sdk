@@ -4,15 +4,19 @@ from __future__ import annotations
 
 from .async_pipeline import AsyncPipeline
 from .async_policy import AsyncPolicy
+from .async_staged_builder import AsyncStagedPipelineBuilder
 from .context import PipelineContext
 from .pipeline import Pipeline
 from .policy import Policy
+from .stage import Stage
+from .staged_builder import StagedPipelineBuilder
 from .step import PipelineStep, RequestPipelineStep, ResponsePipelineStep
 from .step.config import RetryConfig, StepMetadata
 
 __all__ = [
     "AsyncPipeline",
     "AsyncPolicy",
+    "AsyncStagedPipelineBuilder",
     "Pipeline",
     "PipelineContext",
     "PipelineStep",
@@ -20,5 +24,7 @@ __all__ = [
     "RequestPipelineStep",
     "ResponsePipelineStep",
     "RetryConfig",
+    "Stage",
+    "StagedPipelineBuilder",
     "StepMetadata",
 ]
