@@ -1,0 +1,161 @@
+"""Tests for the :mod:`dexpace.sdk.core.util.proxy` module."""
+
+from __future__ import annotations
+
+import pytest
+
+from dexpace.sdk.core.config.configuration import Configuration
+from dexpace.sdk.core.util import ProxyOptions, ProxyType
+
+
+def test_proxy_options_basic() -> None:
+    """A bare ``ProxyOptions`` exposes its constructor arguments verbatim."""
+    options = ProxyOptions(type=ProxyType.HTTP, host="proxy.corp", port=8080)
+    assert options.type is ProxyType.HTTP
+    assert options.host == "proxy.corp"
+    assert options.port == 8080
+    assert options.non_proxy_hosts == ()
+    assert options.username is None
+    assert options.password is None
+
+
+def test_proxy_options_port_validation() -> None:
+    """Negative or out-of-range port values raise ``ValueError``."""
+    with pytest.raises(ValueError):
+        ProxyOptions(type=ProxyType.HTTP, host="proxy", port=-1)
+    with pytest.raises(ValueError):
+        ProxyOptions(type=ProxyType.HTTP, host="proxy", port=65536)
+
+
+def test_proxy_options_empty_host_validation() -> None:
+    """An empty host string is rejected at construction."""
+    with pytest.raises(ValueError):
+        ProxyOptions(type=ProxyType.HTTP, host="", port=8080)
+
+
+def test_bypasses_proxy_exact_match() -> None:
+    """A ``*.suffix`` glob matches any single-label subdomain."""
+    options = ProxyOptions(
+        type=ProxyType.HTTP,
+        host="proxy.corp",
+        port=8080,
+        non_proxy_hosts=("*.internal.example.com",),
+    )
+    assert options.bypasses_proxy("api.internal.example.com") is True
+
+
+def test_bypasses_proxy_case_insensitive() -> None:
+    """Glob matching ignores case on both pattern and candidate host."""
+    options = ProxyOptions(
+        type=ProxyType.HTTP,
+        host="proxy.corp",
+        port=8080,
+        non_proxy_hosts=("*.example.com",),
+    )
+    assert options.bypasses_proxy("API.EXAMPLE.COM") is True
+
+
+def test_bypasses_proxy_no_match() -> None:
+    """Unrelated hosts are not bypassed."""
+    options = ProxyOptions(
+        type=ProxyType.HTTP,
+        host="proxy.corp",
+        port=8080,
+        non_proxy_hosts=("*.internal.example.com",),
+    )
+    assert options.bypasses_proxy("api.example.org") is False
+
+
+def test_repr_masks_credentials() -> None:
+    """``repr`` masks both username and password when present."""
+    options = ProxyOptions(
+        type=ProxyType.HTTP,
+        host="proxy.corp",
+        port=8080,
+        username="alice",
+        password="s3cret",
+    )
+    rendered = repr(options)
+    assert "***" in rendered
+    assert "alice" not in rendered
+    assert "s3cret" not in rendered
+
+
+def test_repr_omits_mask_when_no_creds() -> None:
+    """``repr`` does not include ``'***'`` when credentials are absent."""
+    options = ProxyOptions(type=ProxyType.HTTP, host="proxy.corp", port=8080)
+    assert "***" not in repr(options)
+
+
+def test_from_configuration_https_proxy_url() -> None:
+    """A full HTTPS_PROXY URL parses into all ``ProxyOptions`` fields."""
+    config = (
+        Configuration.builder()
+        .put(Configuration.HTTPS_PROXY, "http://user:pw@proxy.corp:8080")
+        .build()
+    )
+    options = ProxyOptions.from_configuration(config)
+    assert options is not None
+    assert options.type is ProxyType.HTTP
+    assert options.host == "proxy.corp"
+    assert options.port == 8080
+    assert options.username == "user"
+    assert options.password == "pw"
+
+
+def test_from_configuration_https_wins_over_http() -> None:
+    """When both env vars are set, HTTPS_PROXY takes precedence."""
+    config = (
+        Configuration.builder()
+        .put(Configuration.HTTPS_PROXY, "http://secure.proxy:8443")
+        .put(Configuration.HTTP_PROXY, "http://plain.proxy:8080")
+        .build()
+    )
+    options = ProxyOptions.from_configuration(config)
+    assert options is not None
+    assert options.host == "secure.proxy"
+    assert options.port == 8443
+
+
+def test_from_configuration_no_proxy_wildcard() -> None:
+    """``NO_PROXY=*`` short-circuits to ``None``."""
+    config = (
+        Configuration.builder()
+        .put(Configuration.HTTPS_PROXY, "http://proxy.corp:8080")
+        .put(Configuration.NO_PROXY, "*")
+        .build()
+    )
+    assert ProxyOptions.from_configuration(config) is None
+
+
+def test_from_configuration_no_proxy_list() -> None:
+    """``NO_PROXY`` is a comma-separated list copied into ``non_proxy_hosts``."""
+    config = (
+        Configuration.builder()
+        .put(Configuration.HTTPS_PROXY, "http://proxy.corp:8080")
+        .put(Configuration.NO_PROXY, "example.com,*.internal")
+        .build()
+    )
+    options = ProxyOptions.from_configuration(config)
+    assert options is not None
+    assert options.non_proxy_hosts == ("example.com", "*.internal")
+
+
+def test_from_configuration_malformed_url_returns_none() -> None:
+    """A URL without a host parses to ``None`` rather than raising."""
+    config = Configuration.builder().put(Configuration.HTTPS_PROXY, "not-a-url").build()
+    assert ProxyOptions.from_configuration(config) is None
+
+
+def test_from_configuration_invalid_port_returns_none() -> None:
+    """An out-of-range port in the URL yields ``None``."""
+    config = (
+        Configuration.builder().put(Configuration.HTTPS_PROXY, "http://proxy.corp:99999").build()
+    )
+    assert ProxyOptions.from_configuration(config) is None
+
+
+def test_from_configuration_no_env_returns_none() -> None:
+    """An empty configuration produces ``None``."""
+    config = Configuration(overrides={}, env=lambda _name: None)
+    assert ProxyOptions.from_configuration(config) is None
