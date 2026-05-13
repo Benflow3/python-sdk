@@ -3,6 +3,12 @@
 from __future__ import annotations
 
 from .access_token import AccessTokenInfo, TokenRequestOptions
+from .challenge import AuthenticateChallenge, parse_challenges
+from .challenge_handler import (
+    BasicChallengeHandler,
+    ChallengeHandler,
+    CompositeChallengeHandler,
+)
 from .credentials import (
     AsyncTokenCredential,
     BasicAuthCredential,
@@ -10,6 +16,7 @@ from .credentials import (
     NamedKeyCredential,
     TokenCredential,
 )
+from .digest import DigestAlgorithm, DigestChallengeHandler
 from .policies import (
     AsyncBearerTokenPolicy,
     BasicAuthPolicy,
@@ -22,9 +29,15 @@ __all__ = [
     "AccessTokenInfo",
     "AsyncBearerTokenPolicy",
     "AsyncTokenCredential",
+    "AuthenticateChallenge",
     "BasicAuthCredential",
     "BasicAuthPolicy",
+    "BasicChallengeHandler",
     "BearerTokenPolicy",
+    "ChallengeHandler",
+    "CompositeChallengeHandler",
+    "DigestAlgorithm",
+    "DigestChallengeHandler",
     "InMemoryTokenCache",
     "KeyCredential",
     "KeyCredentialPolicy",
@@ -32,4 +45,5 @@ __all__ = [
     "TokenCache",
     "TokenCredential",
     "TokenRequestOptions",
+    "parse_challenges",
 ]
