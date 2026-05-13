@@ -1,6 +1,7 @@
 """Tests for ``RequestBody`` factories and the ``LoggableRequestBody`` / ``FileRequestBody`` wrappers."""
 from __future__ import annotations
 
+from collections.abc import Callable
 from io import BytesIO
 from pathlib import Path
 
@@ -127,3 +128,31 @@ class TestFileRequestBody:
     def test_zero_count_raises(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError):
             FileRequestBody(tmp_path / "x", count=0)
+
+
+def _make_file_body(tmp_path: Path) -> RequestBody:
+    path = tmp_path / "payload.bin"
+    path.write_bytes(b"hi")
+    return FileRequestBody(path)
+
+
+@pytest.mark.parametrize(
+    "factory",
+    [
+        lambda _tmp: RequestBody.from_bytes(b"hi"),
+        lambda _tmp: RequestBody.from_string("hi"),
+        lambda _tmp: RequestBody.from_form({"a": "1"}),
+        lambda _tmp: RequestBody.from_iter([b"hi"]),
+        lambda _tmp: RequestBody.from_stream(BytesIO(b"hi")),
+        _make_file_body,
+    ],
+)
+@pytest.mark.parametrize("size", [0, -1])
+def test_iter_bytes_rejects_invalid_chunk_size(
+    factory: Callable[[Path], RequestBody],
+    size: int,
+    tmp_path: Path,
+) -> None:
+    body = factory(tmp_path)
+    with pytest.raises(ValueError, match="chunk_size"):
+        list(body.iter_bytes(size))

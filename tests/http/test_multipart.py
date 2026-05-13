@@ -79,3 +79,10 @@ def test_quotes_in_name_escaped() -> None:
     )
     drained = _drain(body)
     assert b'\\"name' in drained
+
+
+@pytest.mark.parametrize("size", [0, -1])
+def test_iter_bytes_rejects_invalid_chunk_size(size: int) -> None:
+    body = MultipartRequestBody([MultipartField(name="a", value="b")])
+    with pytest.raises(ValueError, match="chunk_size"):
+        list(body.iter_bytes(size))

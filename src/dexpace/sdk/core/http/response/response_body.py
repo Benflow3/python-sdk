@@ -14,6 +14,19 @@ from ..common.media_type import MediaType
 _bytes = bytes
 
 
+def _check_chunk_size(chunk_size: int) -> None:
+    """Reject non-positive ``chunk_size`` values.
+
+    Args:
+        chunk_size: Suggested chunk size passed by the caller.
+
+    Raises:
+        ValueError: If ``chunk_size`` is zero or negative.
+    """
+    if chunk_size <= 0:
+        raise ValueError(f"chunk_size must be positive, got {chunk_size}")
+
+
 class ResponseBody(ABC):
     """Body of an HTTP response.
 
@@ -154,6 +167,7 @@ class _BytesResponseBody(ResponseBody):
         return len(self._data)
 
     def iter_bytes(self, chunk_size: int = 64 * 1024) -> Iterator[bytes]:
+        _check_chunk_size(chunk_size)
         if self._consumed:
             raise RuntimeError("ResponseBody has already been consumed")
         self._consumed = True
@@ -190,6 +204,7 @@ class _StreamResponseBody(ResponseBody):
         return self._length
 
     def iter_bytes(self, chunk_size: int = 64 * 1024) -> Iterator[bytes]:
+        _check_chunk_size(chunk_size)
         if self._consumed:
             raise RuntimeError("ResponseBody has already been consumed")
         self._consumed = True

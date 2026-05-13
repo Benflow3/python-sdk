@@ -1,6 +1,7 @@
 """Tests for ``ResponseBody`` factories and ``LoggableResponseBody``."""
 from __future__ import annotations
 
+from collections.abc import Callable
 from io import BytesIO
 
 import pytest
@@ -78,3 +79,20 @@ class TestLoggableResponseBody:
         wrapped = LoggableResponseBody(ResponseBody.from_bytes(b"x"))
         wrapped.close()
         wrapped.close()
+
+
+@pytest.mark.parametrize(
+    "factory",
+    [
+        lambda: ResponseBody.from_bytes(b"hi"),
+        lambda: ResponseBody.from_stream(BytesIO(b"hi")),
+    ],
+)
+@pytest.mark.parametrize("size", [0, -1])
+def test_iter_bytes_rejects_invalid_chunk_size(
+    factory: Callable[[], ResponseBody],
+    size: int,
+) -> None:
+    body = factory()
+    with pytest.raises(ValueError, match="chunk_size"):
+        list(body.iter_bytes(size))

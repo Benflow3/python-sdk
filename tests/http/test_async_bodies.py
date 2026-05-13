@@ -1,7 +1,7 @@
 """Tests for ``AsyncRequestBody`` / ``AsyncResponseBody``."""
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 
 import pytest
 
@@ -78,3 +78,32 @@ async def test_async_context_manager_closes() -> None:
     body = AsyncResponseBody.from_bytes(b"x")
     async with body as b:
         assert b is body
+
+
+class _StubAsyncStream:
+    """Minimal ``SupportsAsyncRead`` stub for the chunk-size guard test."""
+
+    async def read(self, size: int = -1) -> bytes:
+        del size
+        return b""
+
+    async def close(self) -> object:  # pragma: no cover - never reached
+        return None
+
+
+@pytest.mark.parametrize(
+    "factory",
+    [
+        lambda: AsyncResponseBody.from_bytes(b"hi"),
+        lambda: AsyncResponseBody.from_async_stream(_StubAsyncStream()),
+    ],
+)
+@pytest.mark.parametrize("size", [0, -1])
+async def test_aiter_bytes_rejects_invalid_chunk_size(
+    factory: Callable[[], AsyncResponseBody],
+    size: int,
+) -> None:
+    body = factory()
+    with pytest.raises(ValueError, match="chunk_size"):
+        async for _ in body.aiter_bytes(size):
+            pass

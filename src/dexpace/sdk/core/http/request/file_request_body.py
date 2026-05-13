@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Final
 
 from ..common.media_type import MediaType
-from .request_body import RequestBody
+from .request_body import RequestBody, _check_chunk_size
 
 _DEFAULT_CHUNK: Final[int] = 64 * 1024
 
@@ -96,6 +96,7 @@ class FileRequestBody(RequestBody):
         return self
 
     def iter_bytes(self, chunk_size: int = _DEFAULT_CHUNK) -> Iterator[bytes]:
+        _check_chunk_size(chunk_size)
         remaining = self._count
         with self._path.open("rb") as stream:
             if self._offset:

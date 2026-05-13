@@ -10,6 +10,19 @@ from ..common import common_media_types
 from ..common.media_type import MediaType
 
 
+def _check_chunk_size(chunk_size: int) -> None:
+    """Reject non-positive ``chunk_size`` values.
+
+    Args:
+        chunk_size: Suggested chunk size passed by the caller.
+
+    Raises:
+        ValueError: If ``chunk_size`` is zero or negative.
+    """
+    if chunk_size <= 0:
+        raise ValueError(f"chunk_size must be positive, got {chunk_size}")
+
+
 class RequestBody(ABC):
     """Payload of an HTTP request.
 
@@ -221,6 +234,7 @@ class _BytesBody(RequestBody):
         return self
 
     def iter_bytes(self, chunk_size: int = 64 * 1024) -> Iterator[bytes]:
+        _check_chunk_size(chunk_size)
         view = memoryview(self._data)
         for start in range(0, len(view), chunk_size):
             yield bytes(view[start : start + chunk_size])
@@ -249,6 +263,7 @@ class _StreamBody(RequestBody):
         return self._length
 
     def iter_bytes(self, chunk_size: int = 64 * 1024) -> Iterator[bytes]:
+        _check_chunk_size(chunk_size)
         if self._consumed:
             raise RuntimeError(
                 "RequestBody.iter_bytes was already called — the underlying "
@@ -289,6 +304,7 @@ class _IterBody(RequestBody):
         return self._length
 
     def iter_bytes(self, chunk_size: int = 64 * 1024) -> Iterator[bytes]:
+        _check_chunk_size(chunk_size)
         del chunk_size  # caller-supplied chunk size is ignored; iterator chooses its own
         if self._consumed:
             raise RuntimeError(

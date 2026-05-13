@@ -14,7 +14,7 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 
 from ..common.media_type import MediaType
-from .request_body import RequestBody
+from .request_body import RequestBody, _check_chunk_size
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,6 +112,7 @@ class MultipartRequestBody(RequestBody):
         return self
 
     def iter_bytes(self, chunk_size: int = 64 * 1024) -> Iterator[bytes]:
+        _check_chunk_size(chunk_size)
         view = memoryview(self._payload)
         for start in range(0, len(view), chunk_size):
             yield bytes(view[start : start + chunk_size])

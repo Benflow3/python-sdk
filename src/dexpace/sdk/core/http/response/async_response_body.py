@@ -8,6 +8,7 @@ from typing import Self
 
 from ..common.media_type import MediaType
 from ..request.async_request_body import SupportsAsyncRead
+from .response_body import _check_chunk_size
 
 _bytes = bytes
 
@@ -101,6 +102,7 @@ class _AsyncBytesResponseBody(AsyncResponseBody):
         return len(self._data)
 
     async def aiter_bytes(self, chunk_size: int = 64 * 1024) -> AsyncIterator[bytes]:
+        _check_chunk_size(chunk_size)
         if self._consumed:
             raise RuntimeError("AsyncResponseBody has already been consumed")
         self._consumed = True
@@ -137,6 +139,7 @@ class _AsyncStreamResponseBody(AsyncResponseBody):
         return self._length
 
     async def aiter_bytes(self, chunk_size: int = 64 * 1024) -> AsyncIterator[bytes]:
+        _check_chunk_size(chunk_size)
         if self._consumed:
             raise RuntimeError("AsyncResponseBody has already been consumed")
         self._consumed = True
