@@ -37,18 +37,18 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request as _UrllibRequest
 from urllib.request import urlopen
 
-from ..errors import (
+from dexpace.sdk.core.errors import (
     ServiceRequestError,
     ServiceRequestTimeoutError,
     ServiceResponseError,
     ServiceResponseTimeoutError,
 )
-from ..http.common.headers import Headers
-from ..http.common.protocol import Protocol
-from ..http.request.request import Request
-from ..http.response.response import Response
-from ..http.response.response_body import ResponseBody
-from ..http.response.status import Status
+from dexpace.sdk.core.http.common.headers import Headers
+from dexpace.sdk.core.http.common.protocol import Protocol
+from dexpace.sdk.core.http.request.request import Request
+from dexpace.sdk.core.http.response.response import Response
+from dexpace.sdk.core.http.response.response_body import ResponseBody
+from dexpace.sdk.core.http.response.status import Status
 
 _DEFAULT_TIMEOUT: Final[float] = 30.0
 

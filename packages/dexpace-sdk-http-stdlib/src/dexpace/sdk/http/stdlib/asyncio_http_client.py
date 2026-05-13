@@ -38,18 +38,18 @@ import ssl as _ssl
 from types import TracebackType
 from typing import Final, Self
 
-from ..errors import (
+from dexpace.sdk.core.errors import (
     ServiceRequestError,
     ServiceRequestTimeoutError,
     ServiceResponseError,
 )
-from ..http.common.headers import Headers
-from ..http.common.protocol import Protocol
-from ..http.common.url import Url
-from ..http.request.request import Request
-from ..http.response.async_response import AsyncResponse
-from ..http.response.async_response_body import AsyncResponseBody
-from ..http.response.status import Status
+from dexpace.sdk.core.http.common.headers import Headers
+from dexpace.sdk.core.http.common.protocol import Protocol
+from dexpace.sdk.core.http.common.url import Url
+from dexpace.sdk.core.http.request.request import Request
+from dexpace.sdk.core.http.response.async_response import AsyncResponse
+from dexpace.sdk.core.http.response.async_response_body import AsyncResponseBody
+from dexpace.sdk.core.http.response.status import Status
 
 _DEFAULT_TIMEOUT: Final[float] = 30.0
 _CRLF: Final[bytes] = b"\r\n"

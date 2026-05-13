@@ -8,11 +8,11 @@ from collections.abc import Iterator
 
 import pytest
 
-from dexpace.sdk.core.client import UrllibHttpClient
 from dexpace.sdk.core.errors import ServiceRequestError
 from dexpace.sdk.core.http.common import Url
 from dexpace.sdk.core.http.request import Method, Request, RequestBody
 from dexpace.sdk.core.http.response import Status
+from dexpace.sdk.http.stdlib import UrllibHttpClient
 
 
 def _build_response(method: str, body_len: int) -> bytes:

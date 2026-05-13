@@ -7,11 +7,11 @@ from collections.abc import AsyncIterator
 
 import pytest
 
-from dexpace.sdk.core.client import AsyncioHttpClient
 from dexpace.sdk.core.errors import ServiceRequestError
 from dexpace.sdk.core.http.common import Url
 from dexpace.sdk.core.http.request import Method, Request
 from dexpace.sdk.core.http.response import Status
+from dexpace.sdk.http.stdlib import AsyncioHttpClient
 
 
 async def _handle_ok(

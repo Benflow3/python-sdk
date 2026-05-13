@@ -77,6 +77,7 @@ files = [
     "packages/dexpace-sdk-core/src",
     "packages/dexpace-sdk-core/tests",
     "packages/dexpace-sdk-http-stdlib/src",
+    "packages/dexpace-sdk-http-stdlib/tests",
 ]
 
 [[tool.mypy.overrides]]
