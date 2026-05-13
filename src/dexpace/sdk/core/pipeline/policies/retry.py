@@ -29,7 +29,6 @@ from ...errors import (
     ClientAuthenticationError,
     SdkError,
     ServiceRequestError,
-    ServiceRequestTimeoutError,
     ServiceResponseError,
     ServiceResponseTimeoutError,
 )
@@ -299,11 +298,31 @@ class RetryPolicy(Policy):
         return bounded * self._rand.uniform(1 - self._jitter, 1 + self._jitter)
 
     def _sleep_bounded(self, duration: float, absolute_deadline: float) -> None:
+        """Sleep for ``duration`` seconds, clamped to the absolute deadline.
+
+        Both the pre-sleep ("deadline already in the past") and post-sleep
+        ("deadline reached while sleeping") cases raise
+        ``ServiceResponseTimeoutError``. The distinction is not meaningful to
+        callers — in both cases the retry budget is exhausted — and
+        ``ServiceResponseTimeoutError`` is the more accurate label for a
+        budget-exhausted condition (the chain ran out of time waiting for a
+        response, not establishing the request).
+
+        Args:
+            duration: Desired sleep length in seconds. Non-positive values
+                return immediately.
+            absolute_deadline: ``time.monotonic()`` value beyond which the
+                retry budget is considered spent.
+
+        Raises:
+            ServiceResponseTimeoutError: When ``absolute_deadline`` is reached
+                before or during the sleep.
+        """
         if duration <= 0:
             return
         remaining = absolute_deadline - time.monotonic()
         if remaining <= 0:
-            raise ServiceRequestTimeoutError("Retry budget exhausted (timeout reached)")
+            raise ServiceResponseTimeoutError("Retry budget exhausted (timeout reached)")
         actual = min(duration, remaining)
         self._sleep(actual)
         if time.monotonic() >= absolute_deadline:
