@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dexpace-sdk-core"
+version = "0.1.0"
+description = "Zero-dependency Python SDK core for building HTTP client libraries."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { file = "../../LICENSE.md" }
+authors = [{ name = "Omar Aljarrah", email = "o.mazari.om63@gmail.com" }]
+keywords = ["sdk", "http", "client", "toolkit"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: Other/Proprietary License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/dexpace/python-sdk"
+Repository = "https://github.com/dexpace/python-sdk"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dexpace/sdk/core"]
+sources = ["src"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "README.md"]
