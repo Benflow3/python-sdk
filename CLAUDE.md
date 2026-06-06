@@ -23,9 +23,10 @@ bodies are modelled as typed Pythonic abstractions instead.
 - **`mypy --strict` clean.** Every public signature is typed; no `Any` in
   public API; no unused `# type: ignore` comments.
 - **`ruff` and `ruff format` clean** (rule set in `pyproject.toml`).
-- **No runtime dependencies.** `core` ships against the standard library only.
-  If you reach for a third-party package, stop — model it as an adapter
-  behind `HttpClient` or `Serde`.
+- **No runtime dependencies, with one sanctioned exception: `furl`.** `core`
+  otherwise ships against the standard library only. `furl` powers
+  `http.common.Url` parse/serialise; do not introduce any other third-party
+  runtime dep — model it as an adapter behind `HttpClient` or `Serde` instead.
 - **Immutable data with slots.** Models are
   `@dataclass(frozen=True, slots=True)`; mutate via `dataclasses.replace` or
   the `with_*` helpers. Builders are a Java idiom — Python's keyword and
@@ -64,26 +65,37 @@ bodies are modelled as typed Pythonic abstractions instead.
 - **Function-size cap: 50 lines.** Aim 10–25. Refactor when you push past.
 - **Commit style:** `chore:` for refactors/cleanup; `feat:` for new features;
   `fix:` for bug fixes; `docs:` for documentation-only changes.
+- **MIT licence header on every `.py` file.** The project is MIT-licensed
+  (`LICENSE.md` at the root and in each package). Every Python source file —
+  src and tests alike — starts with the two-line header before the module
+  docstring:
+
+  ```python
+  # Copyright (c) 2026 dexpace and Omar Aljarrah.
+  # Licensed under the MIT License. See LICENSE.md in the repository root for details.
+  ```
 
 ## Repository Layout
 
-The repo is a `uv`-managed workspace. Each member under `packages/` is its own
-distribution; PEP 420 namespace packages let them share the `dexpace.sdk.*`
-prefix. Commands run from the workspace root via `uv run …` — `uv sync`
-provisions the virtualenv with both packages installed in editable mode.
+The repo is a `uv`-managed workspace of five distributions. Each member under
+`packages/` is its own distribution; PEP 420 namespace packages let them share
+the `dexpace.sdk.*` prefix. Commands run from the workspace root via
+`uv run …` — `uv sync` provisions the virtualenv with all packages installed
+in editable mode.
 
 ```
 python-sdk/
-├── LICENSE.md
+├── LICENSE.md                              # MIT (also copied into each package)
 ├── README.md
 ├── CLAUDE.md
 ├── pyproject.toml                          # workspace root (uv workspace, dev deps,
 │                                           # ruff/mypy/pytest config)
 ├── uv.lock
-├── .github/workflows/ci.yml                # pytest + mypy + ruff on 3.12 and 3.13
-├── docs/                                   # cross-package documentation
+├── .github/workflows/ci.yml                # pytest + mypy + ruff, python matrix 3.8–3.13
+├── docs/                                   # cross-package documentation: architecture,
+│                                           # auth, bodies, errors, http, pipelines
 └── packages/
-    ├── dexpace-sdk-core/                   # zero-dependency toolkit (no transports)
+    ├── dexpace-sdk-core/                   # toolkit (no transports); only runtime dep: furl
     │   ├── pyproject.toml
     │   ├── README.md
     │   ├── src/dexpace/sdk/core/
@@ -99,40 +111,49 @@ python-sdk/
     │   │   │   ├── context/                # CallContext, DispatchContext,
     │   │   │   │                           # RequestContext, ExchangeContext,
     │   │   │   │                           # ContextStore
-    │   │   │   └── auth/                   # Credential, BearerTokenPolicy,
-    │   │   │                               # BasicAuthPolicy, KeyCredentialPolicy
-    │   │   ├── pipeline/                   # Pipeline, Policy ABC, RetryPolicy,
-    │   │   │                               # LoggingPolicy, TracingPolicy, async twins
+    │   │   │   └── auth/                   # TokenCredential, BearerTokenPolicy,
+    │   │   │                               # BasicAuthPolicy, KeyCredentialPolicy,
+    │   │   │                               # ChallengeHandler (Basic/Digest/Composite),
+    │   │   │                               # AuthenticateChallenge, TokenCache
+    │   │   ├── pipeline/                   # Pipeline/AsyncPipeline, Policy/AsyncPolicy,
+    │   │   │   │                           # Stage, StagedPipelineBuilder, defaults,
+    │   │   │   │                           # sans-io + transport runners under the hood
+    │   │   │   │
+    │   │   │   ├── policies/               # retry, redirect, logging, tracing,
+    │   │   │   │                           # set_date (+ async twins)
+    │   │   │   └── step/                   # PipelineStep, StepMetadata, RetryConfig
     │   │   ├── client/                     # HttpClient + AsyncHttpClient Protocols
+    │   │   ├── config/                     # Configuration
     │   │   ├── serde/                      # Serde, Serializer, Deserializer Protocols
     │   │   ├── errors/                     # SDK-level exception hierarchy
-    │   │   └── instrumentation/            # InstrumentationContext, Span, Tracer,
-    │   │                                   # TracingScope, noops
-    │   └── tests/                          # pytest suite — http/, context/,
-    │                                       # pipeline/, auth/, serde/, sse/, errors/,
-    │                                       # instrumentation/
-    └── dexpace-sdk-http-stdlib/            # reference stdlib transports
-        ├── pyproject.toml                  # depends on dexpace-sdk-core
-        ├── README.md
-        ├── src/dexpace/sdk/http/stdlib/
-        │   ├── urllib_http_client.py       # UrllibHttpClient (sync, blocking)
-        │   └── asyncio_http_client.py      # AsyncioHttpClient (async, stdlib only)
-        └── tests/
+    │   │   ├── instrumentation/            # InstrumentationContext, Span, Tracer,
+    │   │   │                               # TracingScope, noops
+    │   │   └── util/                       # clock, proxy helpers
+    │   └── tests/                          # pytest suite — auth/, config/, context/,
+    │                                       # errors/, http/, instrumentation/,
+    │                                       # pipeline/, serde/, sse/, util/
+    ├── dexpace-sdk-http-stdlib/            # reference stdlib transports:
+    │   │                                   # UrllibHttpClient, AsyncioHttpClient
+    │   └── src/dexpace/sdk/http/stdlib/
+    ├── dexpace-sdk-http-httpx/             # httpx transports (sync + async)
+    │   └── src/dexpace/sdk/http/httpx/
+    ├── dexpace-sdk-http-aiohttp/           # aiohttp transport (async)
+    │   └── src/dexpace/sdk/http/aiohttp/
+    └── dexpace-sdk-http-requests/          # requests transport (sync)
+        └── src/dexpace/sdk/http/requests/
 ```
 
-Planned follow-up packages (not yet present): `dexpace-sdk-http-httpx`,
-`dexpace-sdk-http-aiohttp`, `dexpace-sdk-http-requests`. Each will live under
-`packages/` as a separate distribution, depend on `dexpace-sdk-core`, and
-adapt its third-party HTTP library to the `HttpClient` / `AsyncHttpClient`
-Protocols. Namespace packaging (no `__init__.py` at `src/dexpace/`,
-`src/dexpace/sdk/`, or `src/dexpace/sdk/http/`) is mandatory for every
-package so the `dexpace.sdk` prefix stays shared.
+Every transport package depends on `dexpace-sdk-core` and adapts its HTTP
+library to the `HttpClient` / `AsyncHttpClient` Protocols. Namespace
+packaging (no `__init__.py` at `src/dexpace/`, `src/dexpace/sdk/`, or
+`src/dexpace/sdk/http/`) is mandatory for every package so the `dexpace.sdk`
+prefix stays shared.
 
 ### Common commands (run from the workspace root)
 
 ```bash
 uv sync                          # install workspace + dev tools
-uv run pytest -q                 # walk both packages' test suites
+uv run pytest -q                 # walk all five packages' test suites
 uv run mypy --strict             # type-check everything in `files = [...]`
 uv run ruff check                # lint
 uv run ruff format --check       # formatting gate
@@ -162,13 +183,18 @@ Layered, bottom-up:
    → `ExchangeContext`, all carrying an `InstrumentationContext` for tracing
    correlation. The thread-safe `ContextStore` is keyed by trace id; entries
    evict on `CallContext.close()`.
-4. **`pipeline/step/PipelineStep`** — a Protocol with signature
-   `(input, context) -> output`. Steps compose into chains; the provisional
-   `RetryableStep` adds a retry hook (M2 replaces it with a `Policy` ABC
-   that wraps the downstream chain — see `to-implement.md`). `StepMetadata`
-   and `RetryConfig` provide optional configuration.
+4. **`pipeline`** — `Policy` (and `AsyncPolicy`) wrap the downstream chain;
+   `Pipeline` / `AsyncPipeline` run an ordered set of policies grouped into
+   `Stage`s via `StagedPipelineBuilder`. Shipped policies: retry, redirect,
+   logging, tracing, set-date (each with an async twin under
+   `pipeline/policies/`). `default_pipeline()` / `default_async_pipeline()`
+   assemble the standard stack. The lower-level `pipeline/step/PipelineStep`
+   Protocol (`(input, context) -> output`) plus `StepMetadata` / `RetryConfig`
+   remain for custom composition.
 5. **`client/HttpClient`** — single-method Protocol
-   (`execute(request) -> Response`). Transport is **not** provided by `core`.
+   (`execute(request) -> Response`). Transport is **not** provided by `core`;
+   the `dexpace-sdk-http-*` packages (stdlib, httpx, aiohttp, requests) each
+   adapt one HTTP library to the Protocol.
 
 ## Things That Will Bite You
 
