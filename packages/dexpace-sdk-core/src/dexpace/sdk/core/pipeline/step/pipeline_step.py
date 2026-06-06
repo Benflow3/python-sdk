@@ -1,3 +1,6 @@
+# Copyright (c) 2026 dexpace and Omar Aljarrah.
+# Licensed under the MIT License. See LICENSE.md in the repository root for details.
+
 """``PipelineStep`` Protocol and shape-specialised aliases.
 
 A ``PipelineStep`` is a SansIO transform: stateless, transport-agnostic,

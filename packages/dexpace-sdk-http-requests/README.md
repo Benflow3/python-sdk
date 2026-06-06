@@ -45,3 +45,8 @@ with Pipeline(RequestsHttpClient(), policies=[]) as pipeline:
 | `ReadTimeout`          | `ServiceResponseTimeoutError`  |
 | `ConnectionError`      | `ServiceRequestError`          |
 | `RequestException`     | `ServiceRequestError`          |
+
+## License
+
+Licensed under the [MIT License](LICENSE.md).
+Copyright © 2026 dexpace and Omar Aljarrah.

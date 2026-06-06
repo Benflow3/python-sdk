@@ -53,3 +53,8 @@ from dexpace.sdk.http.stdlib import AsyncioHttpClient
 
 `dexpace-sdk-http-stdlib` depends on `dexpace-sdk-core`; installing
 this package brings it in transitively.
+
+## License
+
+Licensed under the [MIT License](LICENSE.md).
+Copyright © 2026 dexpace and Omar Aljarrah.

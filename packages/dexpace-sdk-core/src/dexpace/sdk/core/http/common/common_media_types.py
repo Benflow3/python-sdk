@@ -1,3 +1,6 @@
+# Copyright (c) 2026 dexpace and Omar Aljarrah.
+# Licensed under the MIT License. See LICENSE.md in the repository root for details.
+
 """Pre-constructed :class:`MediaType` constants for the most common content types.
 
 Exposed as module-level constants. Reusing these avoids re-parsing the same

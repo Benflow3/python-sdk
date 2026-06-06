@@ -1,3 +1,6 @@
+# Copyright (c) 2026 dexpace and Omar Aljarrah.
+# Licensed under the MIT License. See LICENSE.md in the repository root for details.
+
 """Layered runtime configuration with override + env-var lookup.
 
 ``Configuration`` provides a small, dependency-free way for SDK consumers to

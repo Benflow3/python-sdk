@@ -1,3 +1,6 @@
+# Copyright (c) 2026 dexpace and Omar Aljarrah.
+# Licensed under the MIT License. See LICENSE.md in the repository root for details.
+
 """Serialisation / deserialisation exceptions.
 
 These inherit from ``ValueError`` so existing ``except ValueError`` handlers

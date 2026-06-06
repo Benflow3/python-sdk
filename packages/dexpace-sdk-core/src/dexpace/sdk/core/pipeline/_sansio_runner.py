@@ -1,3 +1,6 @@
+# Copyright (c) 2026 dexpace and Omar Aljarrah.
+# Licensed under the MIT License. See LICENSE.md in the repository root for details.
+
 """Adapter that runs a SansIO ``PipelineStep`` inside a ``Policy`` chain.
 
 A SansIO step is a stateless ``(value, ctx) -> value`` transform — typically

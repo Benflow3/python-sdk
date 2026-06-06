@@ -1,3 +1,6 @@
+# Copyright (c) 2026 dexpace and Omar Aljarrah.
+# Licensed under the MIT License. See LICENSE.md in the repository root for details.
+
 """Synchronous ``HttpClient`` implementation built on the ``requests`` library.
 
 ``RequestsHttpClient`` wraps a ``requests.Session`` configured with

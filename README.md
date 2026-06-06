@@ -4,11 +4,7 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
 [![Type-checked: mypy --strict](https://img.shields.io/badge/mypy-strict-blue.svg)](https://mypy.readthedocs.io/)
 [![Ruff](https://img.shields.io/badge/lint-ruff-blue.svg)](https://docs.astral.sh/ruff/)
-
-> [!CAUTION]
-> **Proprietary & confidential software. No rights are granted.** Use,
-> copying, modification, or distribution without explicit written consent
-> from **Omar Aljarrah / dexpace** constitutes copyright infringement.
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE.md)
 
 A toolkit for building Python HTTP client libraries — immutable models, a
 stage-based pipeline runtime, pluggable transports, and an authentication
@@ -246,3 +242,14 @@ Documented in [`CLAUDE.md`](CLAUDE.md). Highlights:
   `CallContext`).
 - `mypy --strict` and `ruff` clean on every commit; Google-style
   docstrings on every public symbol; function-size cap of 50 lines.
+
+## Contributing
+
+External pull requests are welcome. Run the gates above (`pytest`, `mypy
+--strict`, `ruff check`, `ruff format --check`) before opening one, and
+follow the conventions in [`CLAUDE.md`](CLAUDE.md).
+
+## License
+
+Licensed under the [MIT License](LICENSE.md).
+Copyright © 2026 dexpace and Omar Aljarrah.

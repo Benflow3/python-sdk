@@ -1,3 +1,6 @@
+# Copyright (c) 2026 dexpace and Omar Aljarrah.
+# Licensed under the MIT License. See LICENSE.md in the repository root for details.
+
 """Pipeline stage taxonomy for the staged-builder API.
 
 Each `Policy` declares its `STAGE: ClassVar[Stage]`. `StagedPipelineBuilder`

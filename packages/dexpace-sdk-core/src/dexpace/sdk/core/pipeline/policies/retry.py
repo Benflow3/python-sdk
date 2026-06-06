@@ -1,3 +1,6 @@
+# Copyright (c) 2026 dexpace and Omar Aljarrah.
+# Licensed under the MIT License. See LICENSE.md in the repository root for details.
+
 """Retry policy modelled on Azure ``corehttp``'s ``RetryPolicy``.
 
 Drives the request through ``self.next`` repeatedly until the response

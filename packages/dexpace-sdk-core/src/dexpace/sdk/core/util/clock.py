@@ -1,3 +1,6 @@
+# Copyright (c) 2026 dexpace and Omar Aljarrah.
+# Licensed under the MIT License. See LICENSE.md in the repository root for details.
+
 """Clock abstractions for testable, time-dependent code.
 
 Time-dependent components (retry backoff, bearer-token refresh, deadline

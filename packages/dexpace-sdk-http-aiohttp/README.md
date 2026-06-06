@@ -56,3 +56,8 @@ aiohttp's transport exceptions surface as the SDK's typed errors:
 
 `dexpace-sdk-http-aiohttp` depends on `dexpace-sdk-core`; installing
 this package brings it in transitively.
+
+## License
+
+Licensed under the [MIT License](LICENSE.md).
+Copyright © 2026 dexpace and Omar Aljarrah.

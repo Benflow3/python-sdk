@@ -61,3 +61,8 @@ See the workspace root README for the full architecture overview.
 - [`dexpace-sdk-http-stdlib`](https://pypi.org/project/dexpace-sdk-http-stdlib/) —
   reference stdlib-only transports (`UrllibHttpClient`, `AsyncioHttpClient`)
   that depend on this package.
+
+## License
+
+Licensed under the [MIT License](LICENSE.md).
+Copyright © 2026 dexpace and Omar Aljarrah.

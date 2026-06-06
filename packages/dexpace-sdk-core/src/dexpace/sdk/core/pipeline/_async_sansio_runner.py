@@ -1,3 +1,6 @@
+# Copyright (c) 2026 dexpace and Omar Aljarrah.
+# Licensed under the MIT License. See LICENSE.md in the repository root for details.
+
 """Async SansIO runners — mirror the sync ``_SansIO*Runner`` shapes.
 
 Async SansIO steps may be plain callables (``(value, ctx) -> value``) or

@@ -1,3 +1,6 @@
+# Copyright (c) 2026 dexpace and Omar Aljarrah.
+# Licensed under the MIT License. See LICENSE.md in the repository root for details.
+
 """Digest access authentication handler (RFC 7616).
 
 Supports algorithms ``MD5``, ``MD5-sess``, ``SHA-256``, and ``SHA-256-sess``

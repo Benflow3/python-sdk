@@ -60,3 +60,8 @@ hierarchy:
 | `httpx.WriteTimeout` | `ServiceRequestTimeoutError` |
 | `httpx.PoolTimeout` | `ServiceRequestTimeoutError` |
 | `httpx.RequestError` (other) | `ServiceRequestError` |
+
+## License
+
+Licensed under the [MIT License](LICENSE.md).
+Copyright © 2026 dexpace and Omar Aljarrah.

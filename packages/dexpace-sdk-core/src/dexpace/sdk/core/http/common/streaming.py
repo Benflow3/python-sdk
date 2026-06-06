@@ -1,3 +1,6 @@
+# Copyright (c) 2026 dexpace and Omar Aljarrah.
+# Licensed under the MIT License. See LICENSE.md in the repository root for details.
+
 """Streaming helpers — JSONL parsing and HTTP/1.1 chunked-transfer framing.
 
 These are SansIO utilities: they consume / produce ``Iterator[bytes]`` (or
