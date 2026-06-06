@@ -227,8 +227,8 @@ uv run ruff check                # lint
 uv run ruff format --check       # formatting gate
 ```
 
-CI runs the same gates on Python 3.12 and 3.13 for every push and pull
-request — see [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+CI runs the same gates on Python 3.12, 3.13, and 3.14 for every push and
+pull request — see [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ## Conventions
 

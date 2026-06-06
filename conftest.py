@@ -35,9 +35,12 @@ def _own_default_event_loop() -> Iterator[None]:
         yield
     finally:
         # ``pytest_asyncio`` may have replaced the current loop; close
-        # whichever loop the policy currently points at.
+        # whichever loop is current at teardown. ``asyncio.get_event_loop``
+        # (not the policy API — deprecated in 3.14) returns the set loop
+        # without warning on every supported version, and raises
+        # ``RuntimeError`` on 3.14+ when none is set.
         try:
-            current = asyncio.get_event_loop_policy().get_event_loop()
+            current = asyncio.get_event_loop()
         except RuntimeError:
             current = None
         for candidate in {loop, current}:

@@ -91,7 +91,7 @@ python-sdk/
 ├── pyproject.toml                          # workspace root (uv workspace, dev deps,
 │                                           # ruff/mypy/pytest config)
 ├── uv.lock
-├── .github/workflows/ci.yml                # pytest + mypy + ruff, python matrix 3.8–3.13
+├── .github/workflows/ci.yml                # pytest + mypy + ruff, python matrix 3.12–3.14
 ├── docs/                                   # cross-package documentation: architecture,
 │                                           # auth, bodies, errors, http, pipelines
 └── packages/
